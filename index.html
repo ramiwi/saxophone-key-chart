@@ -37,7 +37,7 @@
       margin-bottom: 12px;
     }
     label { display: block; font-size: .8rem; color: var(--muted); margin-bottom: 4px; }
-    select, input, button {
+    select, input {
       width: 100%;
       padding: 8px 10px;
       border: 1px solid var(--line);
@@ -46,15 +46,6 @@
       background: #fff;
       color: var(--ink);
     }
-    button {
-      background: #fff;
-      color: var(--ink);
-      border: 2px solid var(--ink);
-      cursor: pointer;
-      font-weight: 600;
-      align-self: end;
-    }
-    button:hover { background: #f5f5f5; }
     .legend {
       display: flex;
       gap: 14px;
@@ -126,7 +117,8 @@
       width: 100%;
       border-radius: 2px;
       background: #fff;
-      border: 1px solid var(--line);
+      padding: 20px 10px;
+      /* border: 1px solid var(--line); */
       overflow: hidden;
       display: flex;
       justify-content: center;
@@ -191,9 +183,7 @@
       .no-print,
       .controls,
       .status,
-      .sub,
-      button,
-      #buildBtn { display: none !important; }
+      .sub { display: none !important; }
       .legend {
         margin: 0 0 8px;
         font-size: 9pt;
@@ -291,9 +281,6 @@
           <option value="0">No</option>
         </select>
       </div>
-      <div>
-        <button id="buildBtn" type="button">Build Chart</button>
-      </div>
     </div>
 
     <div class="legend">
@@ -349,10 +336,68 @@
     const octavesEl = document.getElementById("octaves");
     const registerEl = document.getElementById("register");
     const preferFlatsEl = document.getElementById("preferFlats");
-    const buildBtn = document.getElementById("buildBtn");
     const titleEl = document.getElementById("title");
     const cardsEl = document.getElementById("cards");
     const schemaInfoEl = document.getElementById("schemaInfo");
+
+    const VALID_REGISTERS = new Set(["all", "low", "main", "middle", "upper", "palm"]);
+    const URL_DEFAULTS = {
+      mode: "scale",
+      root: "C",
+      scale: "Major (Ionian)",
+      octaves: "1",
+      register: "all",
+      flats: "1"
+    };
+
+    function readUrlState() {
+      const params = new URLSearchParams(location.search);
+      return {
+        mode: params.get("mode") || URL_DEFAULTS.mode,
+        root: params.get("root") || URL_DEFAULTS.root,
+        scale: params.get("scale") || URL_DEFAULTS.scale,
+        octaves: params.get("octaves") || URL_DEFAULTS.octaves,
+        register: params.get("register") || URL_DEFAULTS.register,
+        flats: params.get("flats") || URL_DEFAULTS.flats
+      };
+    }
+
+    function applyUrlState() {
+      const state = readUrlState();
+
+      if (state.mode === "scale" || state.mode === "chromatic") {
+        modeEl.value = state.mode;
+      }
+      if (PC_INDEX[state.root] !== undefined) {
+        rootEl.value = state.root;
+      }
+      if (SCALE_PATTERNS[state.scale]) {
+        scaleEl.value = state.scale;
+      }
+      octavesEl.value = String(Math.max(1, Math.min(3, Number(state.octaves) || 1)));
+      if (VALID_REGISTERS.has(state.register)) {
+        registerEl.value = state.register;
+      }
+      if (state.flats === "0" || state.flats === "1") {
+        preferFlatsEl.value = state.flats;
+      }
+    }
+
+    function syncUrlState() {
+      const params = new URLSearchParams({
+        mode: modeEl.value,
+        root: rootEl.value,
+        scale: scaleEl.value,
+        octaves: String(Math.max(1, Math.min(3, Number(octavesEl.value) || 1))),
+        register: registerEl.value,
+        flats: preferFlatsEl.value
+      });
+      history.replaceState(null, "", `${location.pathname}?${params.toString()}`);
+    }
+
+    function onControlsChange() {
+      draw();
+    }
 
     function showStatus(message, isError = false) {
       statusEl.hidden = false;
@@ -583,6 +628,7 @@
     function draw() {
       if (!schema || !svgTemplate) return;
 
+      syncUrlState();
       updateModeControls();
       const entries = collectEntries();
       const mode = modeEl.value;
@@ -626,6 +672,18 @@
         scaleEl.appendChild(option);
       });
       scaleEl.value = "Major (Ionian)";
+    }
+
+    function bindControls() {
+      [modeEl, rootEl, scaleEl, registerEl, preferFlatsEl].forEach(el => {
+        el.addEventListener("change", onControlsChange);
+      });
+      octavesEl.addEventListener("change", onControlsChange);
+      octavesEl.addEventListener("input", onControlsChange);
+      window.addEventListener("popstate", () => {
+        applyUrlState();
+        draw();
+      });
     }
 
     function parseSvgDocument(svgText) {
@@ -690,8 +748,8 @@
     }
 
     initControls();
-    modeEl.addEventListener("change", draw);
-    buildBtn.addEventListener("click", draw);
+    applyUrlState();
+    bindControls();
     loadAssets();
   </script>
 </body>
