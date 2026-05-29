@@ -1,0 +1,575 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Saxophone Fingering Chart</title>
+  <style>
+    :root {
+      --bg: #ececec;
+      --ink: #1f1f1f;
+      --muted: #666;
+      --accent: #1f5f9b;
+      --card: #ffffff;
+      --line: #d8d8d8;
+      --key-pressed: #2f4658;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, sans-serif;
+      color: var(--ink);
+      background: var(--bg);
+    }
+    .wrap {
+      max-width: 1200px;
+      margin: 20px auto;
+      padding: 16px;
+    }
+    h1 { margin: 0 0 8px; font-size: 1.35rem; }
+    .sub { margin: 0 0 14px; color: var(--muted); font-size: .95rem; }
+    .controls {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+      gap: 10px;
+      padding: 12px;
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      margin-bottom: 12px;
+    }
+    label { display: block; font-size: .8rem; color: var(--muted); margin-bottom: 4px; }
+    select, input, button {
+      width: 100%;
+      padding: 8px 10px;
+      border: 1px solid #cfcfcf;
+      border-radius: 8px;
+      font: inherit;
+      background: #fff;
+    }
+    button {
+      background: var(--accent);
+      color: #fff;
+      border-color: var(--accent);
+      cursor: pointer;
+      font-weight: 600;
+      align-self: end;
+    }
+    .legend {
+      display: flex;
+      gap: 14px;
+      align-items: center;
+      flex-wrap: wrap;
+      margin: 8px 0 12px;
+      font-size: .85rem;
+      color: var(--muted);
+    }
+    .dot {
+      display: inline-block;
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      border: 2px solid var(--ink);
+      vertical-align: middle;
+      margin-right: 6px;
+      background: #fff;
+    }
+    .dot.p { background: var(--key-pressed); border-color: var(--key-pressed); }
+    .scale-title {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 10px 12px;
+      margin-bottom: 10px;
+      font-weight: 600;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+      gap: 12px;
+    }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 10px;
+    }
+    .note {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 8px;
+      margin-bottom: 6px;
+    }
+    .note-main strong { font-size: 1.1rem; display: block; }
+    .note-main small { color: var(--muted); font-size: .82rem; }
+    .note-idx { color: var(--muted); font-size: .82rem; white-space: nowrap; }
+    .register-badge {
+      display: inline-block;
+      margin-top: 4px;
+      padding: 2px 7px;
+      border-radius: 999px;
+      background: #eef4fa;
+      color: #1f5f9b;
+      font-size: .72rem;
+      font-weight: 600;
+    }
+    .alt-select {
+      margin-bottom: 8px;
+      font-size: .82rem;
+    }
+    .diagram-wrap {
+      width: 100%;
+      border-radius: 8px;
+      background: #f8f8f8;
+      border: 1px solid #e3e3e3;
+      overflow: hidden;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 280px;
+    }
+    .diagram-wrap svg {
+      width: 100%;
+      max-width: 210px;
+      height: auto;
+      display: block;
+    }
+    .caption {
+      margin-top: 6px;
+      color: var(--muted);
+      font-size: .75rem;
+      line-height: 1.35;
+      word-break: break-word;
+    }
+    .status {
+      padding: 12px;
+      border-radius: 10px;
+      background: #fff3cd;
+      border: 1px solid #ffe08a;
+      color: #664d03;
+      margin-bottom: 12px;
+    }
+    .status.error { background: #f8d7da; border-color: #f1aeb5; color: #58151c; }
+    @media (max-width: 900px) {
+      .controls { grid-template-columns: repeat(2, minmax(120px, 1fr)); }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Saxophone Fingering Chart</h1>
+    <p class="sub">Wired to <code>saxophone key-schema-v3.json</code> and <code>sax-key-diagram-v2os.svg</code>.</p>
+
+    <div id="status" class="status" hidden></div>
+
+    <div class="controls">
+      <div>
+        <label for="mode">Mode</label>
+        <select id="mode">
+          <option value="scale">Scale</option>
+          <option value="chromatic">Full chromatic (schema range)</option>
+        </select>
+      </div>
+      <div>
+        <label for="root">Root</label>
+        <select id="root"></select>
+      </div>
+      <div>
+        <label for="scale">Scale</label>
+        <select id="scale"></select>
+      </div>
+      <div>
+        <label for="octaves">Octaves</label>
+        <input id="octaves" type="number" min="1" max="3" value="1" />
+      </div>
+      <div>
+        <label for="register">Register filter</label>
+        <select id="register">
+          <option value="all">All</option>
+          <option value="low">Low</option>
+          <option value="main">Main (D1–B1)</option>
+          <option value="middle">Middle (C2)</option>
+          <option value="upper">Upper (octave)</option>
+          <option value="palm">Palm / altissimo</option>
+        </select>
+      </div>
+      <div>
+        <label for="preferFlats">Prefer flats</label>
+        <select id="preferFlats">
+          <option value="1" selected>Yes</option>
+          <option value="0">No</option>
+        </select>
+      </div>
+      <div>
+        <button id="buildBtn" type="button">Build Chart</button>
+      </div>
+    </div>
+
+    <div class="legend">
+      <span><span class="dot p"></span>Pressed</span>
+      <span><span class="dot"></span>Open</span>
+      <span id="schemaInfo"></span>
+    </div>
+
+    <div id="title" class="scale-title"></div>
+    <div id="cards" class="grid"></div>
+  </div>
+
+  <script>
+    const SCHEMA_URL = "saxophone key-schema-v3.json";
+    const SVG_URL = "sax-key-diagram-v2os.svg";
+
+    const PITCHES_SHARP = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+    const PITCHES_FLAT = ["C", "Db", "D", "Eb", "E", "F", "Gb", "G", "Ab", "A", "Bb", "B"];
+    const PC_INDEX = {
+      C: 0, "C#": 1, Db: 1, D: 2, "D#": 3, Eb: 3, E: 4, F: 5,
+      "F#": 6, Gb: 6, G: 7, "G#": 8, Ab: 8, A: 9, "A#": 10, Bb: 10, B: 11
+    };
+    const ENHARMONIC = { "C#": "Db", "D#": "Eb", "F#": "Gb", "G#": "Ab", "A#": "Bb" };
+    const SCALE_PATTERNS = {
+      "Major (Ionian)": [0, 2, 4, 5, 7, 9, 11, 12],
+      "Natural Minor (Aeolian)": [0, 2, 3, 5, 7, 8, 10, 12],
+      "Harmonic Minor": [0, 2, 3, 5, 7, 8, 11, 12],
+      "Melodic Minor (Asc)": [0, 2, 3, 5, 7, 9, 11, 12],
+      "Dorian": [0, 2, 3, 5, 7, 9, 10, 12],
+      "Phrygian": [0, 1, 3, 5, 7, 8, 10, 12],
+      "Lydian": [0, 2, 4, 6, 7, 9, 11, 12],
+      "Mixolydian": [0, 2, 4, 5, 7, 9, 10, 12],
+      "Locrian": [0, 1, 3, 5, 6, 8, 10, 12],
+      "Major Pentatonic": [0, 2, 4, 7, 9, 12],
+      "Minor Pentatonic": [0, 3, 5, 7, 10, 12],
+      "Blues": [0, 3, 5, 6, 7, 10, 12],
+      "Whole Tone": [0, 2, 4, 6, 8, 10, 12],
+      "Chromatic": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+    };
+
+    let schema = null;
+    let svgTemplate = null;
+    let fingeringByNote = new Map();
+    let fingeringByMidi = new Map();
+    let schemaMidiRange = [0, 127];
+
+    const statusEl = document.getElementById("status");
+    const modeEl = document.getElementById("mode");
+    const rootEl = document.getElementById("root");
+    const scaleEl = document.getElementById("scale");
+    const octavesEl = document.getElementById("octaves");
+    const registerEl = document.getElementById("register");
+    const preferFlatsEl = document.getElementById("preferFlats");
+    const buildBtn = document.getElementById("buildBtn");
+    const titleEl = document.getElementById("title");
+    const cardsEl = document.getElementById("cards");
+    const schemaInfoEl = document.getElementById("schemaInfo");
+
+    function showStatus(message, isError = false) {
+      statusEl.hidden = false;
+      statusEl.textContent = message;
+      statusEl.classList.toggle("error", isError);
+    }
+
+    function hideStatus() {
+      statusEl.hidden = true;
+    }
+
+    function parseScientific(note) {
+      const match = note.match(/^([A-G])(#|b)?(\d+)$/);
+      if (!match) return null;
+      const [, letter, acc, octaveStr] = match;
+      const name = letter + (acc || "");
+      return { name, octave: Number(octaveStr), pc: PC_INDEX[name] };
+    }
+
+    function scientificToMidi(note) {
+      const parsed = parseScientific(note);
+      if (!parsed) return null;
+      return (parsed.octave + 1) * 12 + parsed.pc;
+    }
+
+    function pcIndex(note) {
+      return PC_INDEX[note.replace(/b/g, match => "#TEMP").replace("TEMP", "#")];
+    }
+
+    function pitchNameFromPc(pc, preferFlats) {
+      const idx = ((pc % 12) + 12) % 12;
+      return preferFlats ? PITCHES_FLAT[idx] : PITCHES_SHARP[idx];
+    }
+
+    function midiToScientific(midi, preferFlats) {
+      const octave = Math.floor(midi / 12) - 1;
+      const pc = ((midi % 12) + 12) % 12;
+      return pitchNameFromPc(pc, preferFlats) + octave;
+    }
+
+    function normalizePitchName(name, preferFlats) {
+      if (PC_INDEX[name] !== undefined) return name;
+      const flat = ENHARMONIC[name];
+      if (flat && preferFlats) return flat;
+      for (const [sharp, flatName] of Object.entries(ENHARMONIC)) {
+        if (flatName === name && !preferFlats) return sharp;
+      }
+      return name;
+    }
+
+    function buildFingeringIndexes() {
+      fingeringByNote = new Map();
+      fingeringByMidi = new Map();
+      const midis = [];
+
+      for (const entry of schema.fingerings) {
+        fingeringByNote.set(entry.note, entry);
+        const midi = scientificToMidi(entry.note);
+        if (midi !== null) {
+          midis.push(midi);
+          if (!fingeringByMidi.has(midi)) fingeringByMidi.set(midi, entry);
+        }
+      }
+
+      schemaMidiRange = [Math.min(...midis), Math.max(...midis)];
+    }
+
+    function lookupFingering(scientificNote, preferFlats) {
+      const direct = fingeringByNote.get(scientificNote);
+      if (direct) return direct;
+
+      const parsed = parseScientific(scientificNote);
+      if (!parsed) return null;
+
+      const midi = scientificToMidi(scientificNote);
+      const byMidi = fingeringByMidi.get(midi);
+      if (byMidi) return byMidi;
+
+      const normalized = normalizePitchName(parsed.name, preferFlats) + parsed.octave;
+      return fingeringByNote.get(normalized) || null;
+    }
+
+    function getFingeringOptions(entry) {
+      const options = [{
+        id: "primary",
+        label: entry.display_label,
+        keys: entry.pressed_keys
+      }];
+      for (const alt of entry.alternatives || []) {
+        options.push({
+          id: alt.name,
+          label: alt.display_label || alt.name,
+          keys: alt.pressed_keys
+        });
+      }
+      return options;
+    }
+
+    function cloneDiagram(pressedKeys) {
+      const svg = svgTemplate.cloneNode(true);
+      svg.removeAttribute("width");
+      svg.removeAttribute("height");
+      svg.setAttribute("role", "img");
+      svg.setAttribute("aria-label", "Sax fingering diagram");
+
+      const pressed = new Set(pressedKeys);
+      svg.querySelectorAll(".key[data-key]").forEach(keyEl => {
+        if (pressed.has(keyEl.dataset.key)) {
+          keyEl.classList.add("pressed");
+        }
+      });
+      return svg;
+    }
+
+    function registerMatches(entry, filter) {
+      return filter === "all" || entry.register === filter;
+    }
+
+    function buildScaleMidis(root, scaleName, octaves) {
+      const rootPc = pcIndex(root);
+      const pattern = SCALE_PATTERNS[scaleName];
+      let startMidi = schemaMidiRange[0];
+      while (startMidi % 12 !== rootPc) startMidi += 1;
+
+      const out = [];
+      for (let o = 0; o < octaves; o++) {
+        const offset = o * 12;
+        const end = pattern.length - (o < octaves - 1 ? 1 : 0);
+        for (let i = 0; i < end; i++) {
+          out.push(startMidi + pattern[i] + offset);
+        }
+      }
+      return out.filter(m => m >= schemaMidiRange[0] && m <= schemaMidiRange[1]);
+    }
+
+    function collectEntries() {
+      const preferFlats = preferFlatsEl.value === "1";
+      const registerFilter = registerEl.value;
+      const mode = modeEl.value;
+
+      if (mode === "chromatic") {
+        return schema.fingerings.filter(entry => registerMatches(entry, registerFilter));
+      }
+
+      const root = rootEl.value;
+      const scale = scaleEl.value;
+      const octaves = Math.max(1, Math.min(3, Number(octavesEl.value) || 1));
+      const midis = buildScaleMidis(root, scale, octaves);
+      const seen = new Set();
+      const entries = [];
+
+      for (const midi of midis) {
+        const scientific = midiToScientific(midi, preferFlats);
+        const entry = lookupFingering(scientific, preferFlats);
+        if (!entry || seen.has(entry.note)) continue;
+        if (!registerMatches(entry, registerFilter)) continue;
+        seen.add(entry.note);
+        entries.push(entry);
+      }
+      return entries;
+    }
+
+    function renderCard(entry, index) {
+      const options = getFingeringOptions(entry);
+      const card = document.createElement("article");
+      card.className = "card";
+
+      const noteHeader = document.createElement("div");
+      noteHeader.className = "note";
+      noteHeader.innerHTML = `
+        <div class="note-main">
+          <strong>${entry.note}</strong>
+          <small>${entry.display_label}${entry.register_label ? " · " + entry.register_label : ""}</small>
+          <span class="register-badge">${entry.register}</span>
+        </div>
+        <span class="note-idx">#${index + 1}</span>
+      `;
+      card.appendChild(noteHeader);
+
+      let activeOption = options[0];
+      let diagramWrap = document.createElement("div");
+      diagramWrap.className = "diagram-wrap";
+
+      function paintDiagram() {
+        diagramWrap.replaceChildren(cloneDiagram(activeOption.keys));
+      }
+
+      if (options.length > 1) {
+        const altSelect = document.createElement("select");
+        altSelect.className = "alt-select";
+        altSelect.setAttribute("aria-label", `Fingering variant for ${entry.note}`);
+        options.forEach((option, i) => {
+          const opt = document.createElement("option");
+          opt.value = String(i);
+          opt.textContent = option.label;
+          altSelect.appendChild(opt);
+        });
+        altSelect.addEventListener("change", () => {
+          activeOption = options[Number(altSelect.value)];
+          paintDiagram();
+          caption.textContent = activeOption.keys.length
+            ? activeOption.keys.join(", ")
+            : "Open (no keys pressed)";
+        });
+        card.appendChild(altSelect);
+      }
+
+      paintDiagram();
+      card.appendChild(diagramWrap);
+
+      const caption = document.createElement("div");
+      caption.className = "caption";
+      caption.textContent = activeOption.keys.length
+        ? activeOption.keys.join(", ")
+        : "Open (no keys pressed)";
+      card.appendChild(caption);
+
+      return card;
+    }
+
+    function updateModeControls() {
+      const chromatic = modeEl.value === "chromatic";
+      rootEl.disabled = chromatic;
+      scaleEl.disabled = chromatic;
+      octavesEl.disabled = chromatic;
+    }
+
+    function draw() {
+      if (!schema || !svgTemplate) return;
+
+      updateModeControls();
+      const entries = collectEntries();
+      const mode = modeEl.value;
+
+      if (mode === "scale") {
+        const root = rootEl.value;
+        const scale = scaleEl.value;
+        const octaves = Math.max(1, Math.min(3, Number(octavesEl.value) || 1));
+        titleEl.textContent = `${root} ${scale} · ${octaves} octave${octaves > 1 ? "s" : ""} · ${entries.length} notes in range`;
+      } else {
+        const first = schema.fingerings[0].note;
+        const last = schema.fingerings[schema.fingerings.length - 1].note;
+        titleEl.textContent = `Chromatic · ${entries.length} notes · ${first} to ${last}`;
+      }
+
+      cardsEl.replaceChildren();
+      if (!entries.length) {
+        const empty = document.createElement("p");
+        empty.className = "caption";
+        empty.textContent = "No fingerings match the current filters.";
+        cardsEl.appendChild(empty);
+        return;
+      }
+
+      entries.forEach((entry, i) => cardsEl.appendChild(renderCard(entry, i)));
+    }
+
+    function initControls() {
+      PITCHES_FLAT.forEach(name => {
+        const option = document.createElement("option");
+        option.value = name;
+        option.textContent = name;
+        rootEl.appendChild(option);
+      });
+      rootEl.value = "C";
+
+      Object.keys(SCALE_PATTERNS).forEach(name => {
+        const option = document.createElement("option");
+        option.value = name;
+        option.textContent = name;
+        scaleEl.appendChild(option);
+      });
+      scaleEl.value = "Major (Ionian)";
+    }
+
+    async function loadAssets() {
+      showStatus("Loading schema and diagram…");
+      try {
+        const [schemaRes, svgRes] = await Promise.all([
+          fetch(SCHEMA_URL),
+          fetch(SVG_URL)
+        ]);
+        if (!schemaRes.ok) throw new Error(`Could not load ${SCHEMA_URL} (${schemaRes.status})`);
+        if (!svgRes.ok) throw new Error(`Could not load ${SVG_URL} (${svgRes.status})`);
+
+        schema = await schemaRes.json();
+        const svgText = await svgRes.text();
+        svgTemplate = new DOMParser().parseFromString(svgText, "image/svg+xml").documentElement;
+
+        if (svgTemplate.querySelector("parsererror")) {
+          throw new Error("SVG parse error");
+        }
+
+        buildFingeringIndexes();
+        schemaInfoEl.textContent = `Schema v${schema.version} · ${schema.fingerings.length} fingerings · ${schema.total_keys} keys`;
+        hideStatus();
+        draw();
+      } catch (err) {
+        showStatus(
+          `${err.message}. Serve this folder over HTTP (e.g. python3 -m http.server) so the browser can load the JSON and SVG files.`,
+          true
+        );
+      }
+    }
+
+    initControls();
+    modeEl.addEventListener("change", draw);
+    buildBtn.addEventListener("click", draw);
+    loadAssets();
+  </script>
+</body>
+</html>

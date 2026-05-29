@@ -1,0 +1,147 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="203.03" height="363.88" aria-labelledby="title desc" role="img" version="1.1" viewBox="0 0 203.03 363.88" xmlns="http://www.w3.org/2000/svg" xmlns:cc="http://creativecommons.org/ns#" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+ <title id="title">Saxophone key diagram</title>
+ <desc id="desc">Anatomical fingering chart layout matching standard saxophone key terminology. Keys use v3 schema IDs.</desc>
+ <defs>
+  <style>.key { cursor: pointer; }
+      .key .key-fill { fill: #ffffff; stroke: #1a1a1a; stroke-width: 1.8; transition: fill 0.12s, stroke 0.12s; }
+      .key .key-label { fill: #1a1a1a; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; font-size: 10px; font-weight: 600; pointer-events: none; text-anchor: middle; dominant-baseline: middle; }
+      .key .key-label-sm { font-size: 8px; font-weight: 700; }
+      .key:hover .key-fill { fill: #eef4fa; stroke: #1f5f9b; }
+      .key:focus { outline: none; }
+      .key:focus-visible .key-fill { stroke: #1f5f9b; stroke-width: 2.4; }
+      .key.pressed .key-fill { fill: #2f4658; stroke: #2f4658; }
+      .key.pressed .key-label { fill: #ffffff; }
+      .group-ring { fill: none; stroke: #c44a7a; stroke-width: 1.6; opacity: 0.85; }
+      .group-label { fill: #c44a7a; font-family: system-ui, sans-serif; font-size: 11px; font-weight: 700; }
+      .anno { fill: #1a1a1a; font-family: system-ui, sans-serif; font-size: 10px; font-weight: 600; }
+      .anno-line { stroke: #1a1a1a; stroke-width: 1; fill: none; marker-end: url(#arrow); }
+      .divider { stroke: #1a1a1a; stroke-width: 1.4; }</style>
+ </defs>
+ <!-- Group rings (reference diagram style) -->
+ <!-- Top: Aux / Front F -->
+ <g class="key" transform="translate(-69.428 -11.012)" data-key="Aux" role="button" tabindex="0">
+  <title>Aux - Front F# (Auxiliary)</title>
+  <rect class="key-fill" transform="rotate(-8,140,21)" x="118" y="14" width="44" height="14" rx="7" ry="7"/>
+  <text class="key-label" x="140" y="22">Aux</text>
+ </g>
+ <!-- Octave key -->
+ <g class="key" transform="translate(-63.578 -23.298)" data-key="8ve" role="button" tabindex="0">
+  <title>8ve - Octave key</title>
+  <path class="key-fill" transform="rotate(-18,79,72)" d="m78 48c-6 0-12 10-12 24 0 16 8 26 16 26 6 0 10-6 10-14 0-18-6-36-14-36z"/>
+  <text class="key-label key-label-sm" x="76" y="74">8ve</text>
+ </g>
+ <!-- Palm keys -->
+ <g class="key" transform="rotate(-22 133.28 227.75)" data-key="C2" role="button" tabindex="0">
+  <title>C2 - Palm Eb</title>
+  <rect class="key-fill" x="214" y="38" width="18" height="46" rx="9" ry="9"/>
+  <text class="key-label key-label-sm" x="223" y="64">C2</text>
+ </g>
+ <g class="key" transform="rotate(-22 134.28 232.89)" data-key="C4" role="button" tabindex="0">
+  <title>C4 - Palm F</title>
+  <rect class="key-fill" x="196" y="78" width="18" height="46" rx="9" ry="9"/>
+  <text class="key-label key-label-sm" x="205" y="104">C4</text>
+ </g>
+ <g class="key" transform="rotate(-22 136.28 243.18)" data-key="C1" role="button" tabindex="0">
+  <title>C1 - Palm D</title>
+  <rect class="key-fill" x="242" y="74" width="18" height="46" rx="9" ry="9"/>
+  <text class="key-label key-label-sm" x="251" y="100">C1</text>
+ </g>
+ <!-- Main stack: left hand -->
+ <g class="key" transform="translate(-63.578 -23.298)" data-key="L1" role="button" tabindex="0">
+  <title>L1 - Left hand 1</title>
+  <circle class="key-fill" cx="140" cy="72" r="16"/>
+ </g>
+ <g class="key" transform="translate(-63.578 -23.298)" data-key="Bis" role="button" tabindex="0">
+  <title>Bis - Bis Bb key</title>
+  <circle class="key-fill" cx="172" cy="96" r="11"/>
+  <text class="key-label key-label-sm" x="172" y="97">Bis</text>
+ </g>
+ <g class="key" transform="translate(-63.578 -23.298)" data-key="L2" role="button" tabindex="0">
+  <title>L2 - Left hand 2</title>
+  <circle class="key-fill" cx="140" cy="118" r="16"/>
+ </g>
+ <g class="key" transform="translate(-63.578 -23.298)" data-key="L3" role="button" tabindex="0">
+  <title>L3 - Left hand 3</title>
+  <circle class="key-fill" cx="140" cy="164" r="16"/>
+ </g>
+ <!-- Main stack: right hand -->
+ <g class="key" transform="translate(-63.578 -23.298)" data-key="R1" role="button" tabindex="0">
+  <title>R1 - Right hand 1</title>
+  <circle class="key-fill" cx="140" cy="218" r="16"/>
+ </g>
+ <g class="key" transform="translate(-63.578 -23.298)" data-key="R2" role="button" tabindex="0">
+  <title>R2 - Right hand 2</title>
+  <circle class="key-fill" cx="140" cy="264" r="16"/>
+ </g>
+ <g class="key" transform="translate(-63.578 -23.298)" data-key="R3" role="button" tabindex="0">
+  <title>R3 - Right hand 3</title>
+  <circle class="key-fill" cx="140" cy="310" r="16"/>
+ </g>
+ <!-- Side keys -->
+ <g class="key" transform="matrix(.5625 0 0 .5625 -10.453 53.202)" data-key="C3" role="button" tabindex="0">
+  <title>C3 - Side Eb (Side E)</title>
+  <rect class="key-fill" x="54" y="132" width="16" height="40" rx="8" ry="8"/>
+  <text class="key-label key-label-sm" x="62.331215" y="155.8557" style="stroke-width:3.323">C3</text>
+ </g>
+ <g class="key" transform="matrix(.75 0 0 .75 -22.078 15.702)" data-key="TC" role="button" tabindex="0">
+  <title>TC - Side C</title>
+  <rect class="key-fill" x="56" y="181" width="12" height="30" rx="6" ry="6" style="stroke-width:1.35"/>
+  <text class="key-label key-label-sm" x="62.1968" y="199.46349" style="stroke-width:2.832">TC</text>
+ </g>
+ <g class="key" transform="matrix(.5625 0 0 .5625 -10.453 51.702)" data-key="TA" role="button" tabindex="0">
+  <title>TA - Side Bb</title>
+  <rect class="key-fill" x="54" y="220" width="16" height="40" rx="8" ry="8"/>
+  <text class="key-label key-label-sm" x="61.891911" y="244.76985" style="stroke-width:12.337">TA</text>
+ </g>
+ <!-- Left pinky table (spatulas) -->
+ <g class="key" transform="translate(-63.578 -23.298)" data-key="G_sharp" role="button" tabindex="0">
+  <title>G sharp spatula</title>
+  <rect class="key-fill" x="188" y="168" width="46" height="16" rx="4" ry="8"/>
+  <text class="key-label key-label-sm" x="211" y="177">G#</text>
+ </g>
+ <g class="key" transform="translate(-57.578 -23.298)" data-key="B_low" role="button" tabindex="0">
+  <title>Low B spatula</title>
+  <rect class="key-fill" x="172" y="192" width="32" height="18" rx="4" ry="4"/>
+  <text class="key-label key-label-sm" x="187" y="202">B</text>
+ </g>
+ <g class="key" transform="translate(-55.578 -23.298)" data-key="C_sharp_low" role="button" tabindex="0">
+  <title>Low C sharp spatula</title>
+  <rect class="key-fill" x="206" y="192" width="32" height="18" rx="4" ry="4"/>
+  <text class="key-label key-label-sm" x="221" y="202">C#</text>
+ </g>
+ <g class="key" transform="translate(-63.578 -23.298)" data-key="Bb_low" role="button" tabindex="0">
+  <title>Low Bb spatula</title>
+  <rect class="key-fill" x="188" y="218" width="46" height="16" rx="4" ry="8"/>
+  <text class="key-label key-label-sm" x="211" y="227">Bb</text>
+ </g>
+ <!-- Fork F# / Front F lower left -->
+ <g class="key" transform="matrix(.42711 0 0 .52501 28.445 64.094)" data-key="C5" role="button" tabindex="0">
+  <title>C5 - Side F# (High F#)</title>
+  <path class="key-fill" d="m68.591 287.67c-9.2718-3.0476-17.585 5.0053-23.111 16.131-6.4465 12.981-3.6337 24.69 5.6381 27.738 5.5631 1.8285 12.035-2.5155 15.718-9.933 7.3675-14.835 9.1718-31.498 1.7544-33.936z"/>
+  <text class="key-label key-label-sm" x="58" y="312">C5</text>
+ </g>
+ <g class="key" transform="matrix(.4503 0 0 .4503 25.053 90.212)" data-key="TF" role="button" tabindex="0">
+  <title>TF - Front F (Top F)</title>
+  <path class="key-fill" d="m58 338c-10 0-14 10-14 22 0 14 8 24 18 24 6 0 10-6 10-14 0-16-6-32-14-32z"/>
+  <text class="key-label key-label-sm" x="58" y="364">TF</text>
+ </g>
+ <!-- Right pinky low keys: split circle -->
+ <g class="key" transform="matrix(.75 0 0 .75 -28.578 64.702)" data-key="Eb_low" role="button" tabindex="0">
+  <title>Eb - Low Eb key</title>
+  <path class="key-fill" d="m112 366a28 28 0 0 1 56 0h-28z"/>
+  <text class="key-label" x="140" y="352">Eb</text>
+ </g>
+ <g class="key" transform="matrix(.75 0 0 .75 -28.578 67.702)" data-key="C_low" role="button" tabindex="0">
+  <title>C - Low C key</title>
+  <path class="key-fill" d="m112 366a28 28 0 0 0 56 0h-28z"/>
+  <text class="key-label" x="140" y="382">C</text>
+ </g>
+ <metadata>
+  <rdf:RDF>
+   <cc:Work rdf:about="">
+    <dc:title>Saxophone key diagram</dc:title>
+   </cc:Work>
+  </rdf:RDF>
+ </metadata>
+</svg>
