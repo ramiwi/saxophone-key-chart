@@ -6,13 +6,11 @@
   <title>Saxophone Key Chart</title>
   <style>
     :root {
-      --bg: #ececec;
-      --ink: #1f1f1f;
-      --muted: #666;
-      --accent: #1f5f9b;
-      --card: #ffffff;
-      --line: #d8d8d8;
-      --key-pressed: #2f4658;
+      --bg: #ffffff;
+      --ink: #000000;
+      --muted: #444444;
+      --line: #bbbbbb;
+      --key-pressed: #cccccc;
     }
     * { box-sizing: border-box; }
     body {
@@ -26,35 +24,37 @@
       margin: 20px auto;
       padding: 16px;
     }
-    h1 { margin: 0 0 8px; font-size: 1.35rem; }
-    .sub { margin: 0 0 14px; color: var(--muted); font-size: .95rem; }
+    h1 { margin: 0 0 8px; font-size: 1.35rem; font-weight: 700; }
+    .sub { margin: 0 0 14px; color: var(--muted); font-size: .9rem; }
     .controls {
       display: grid;
       grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
       gap: 10px;
       padding: 12px;
-      background: var(--card);
+      background: #fff;
       border: 1px solid var(--line);
-      border-radius: 12px;
+      border-radius: 4px;
       margin-bottom: 12px;
     }
     label { display: block; font-size: .8rem; color: var(--muted); margin-bottom: 4px; }
     select, input, button {
       width: 100%;
       padding: 8px 10px;
-      border: 1px solid #cfcfcf;
-      border-radius: 8px;
+      border: 1px solid var(--line);
+      border-radius: 4px;
       font: inherit;
       background: #fff;
+      color: var(--ink);
     }
     button {
-      background: var(--accent);
-      color: #fff;
-      border-color: var(--accent);
+      background: #fff;
+      color: var(--ink);
+      border: 2px solid var(--ink);
       cursor: pointer;
       font-weight: 600;
       align-self: end;
     }
+    button:hover { background: #f5f5f5; }
     .legend {
       display: flex;
       gap: 14px;
@@ -69,16 +69,16 @@
       width: 12px;
       height: 12px;
       border-radius: 50%;
-      border: 2px solid var(--ink);
+      border: 1.5px solid var(--ink);
       vertical-align: middle;
       margin-right: 6px;
       background: #fff;
     }
-    .dot.p { background: var(--key-pressed); border-color: var(--key-pressed); }
+    .dot.p { background: var(--key-pressed); border-color: var(--ink); }
     .scale-title {
-      background: var(--card);
+      background: #fff;
       border: 1px solid var(--line);
-      border-radius: 10px;
+      border-radius: 4px;
       padding: 10px 12px;
       margin-bottom: 10px;
       font-weight: 600;
@@ -89,10 +89,12 @@
       gap: 12px;
     }
     .card {
-      background: var(--card);
+      background: #fff;
       border: 1px solid var(--line);
-      border-radius: 12px;
+      border-radius: 4px;
       padding: 10px;
+      break-inside: avoid;
+      page-break-inside: avoid;
     }
     .note {
       display: flex;
@@ -107,12 +109,14 @@
     .register-badge {
       display: inline-block;
       margin-top: 4px;
-      padding: 2px 7px;
+      padding: 1px 6px;
       border-radius: 999px;
-      background: #eef4fa;
-      color: #1f5f9b;
+      border: 1px solid var(--line);
+      background: #fff;
+      color: var(--muted);
       font-size: .72rem;
       font-weight: 600;
+      text-transform: capitalize;
     }
     .alt-select {
       margin-bottom: 8px;
@@ -120,9 +124,9 @@
     }
     .diagram-wrap {
       width: 100%;
-      border-radius: 8px;
-      background: #f8f8f8;
-      border: 1px solid #e3e3e3;
+      border-radius: 2px;
+      background: #fff;
+      border: 1px solid var(--line);
       overflow: hidden;
       display: flex;
       justify-content: center;
@@ -135,6 +139,28 @@
       height: auto;
       display: block;
     }
+    /* Override SVG embedded styles: light gray fill saves ink vs solid dark */
+    .diagram-wrap svg .key .key-fill {
+      fill: #ffffff;
+      stroke: #000000;
+      stroke-width: 1.5;
+    }
+    .diagram-wrap svg .key .key-label,
+    .diagram-wrap svg .key .key-label-sm {
+      fill: #000000;
+    }
+    .diagram-wrap svg .key.pressed .key-fill {
+      fill: #cccccc;
+      stroke: #000000;
+    }
+    .diagram-wrap svg .key.pressed .key-label,
+    .diagram-wrap svg .key.pressed .key-label-sm {
+      fill: #000000;
+    }
+    .diagram-wrap svg .key:hover .key-fill {
+      fill: #eeeeee;
+      stroke: #000000;
+    }
     .caption {
       margin-top: 6px;
       color: var(--muted);
@@ -144,22 +170,86 @@
     }
     .status {
       padding: 12px;
-      border-radius: 10px;
-      background: #fff3cd;
-      border: 1px solid #ffe08a;
-      color: #664d03;
+      border-radius: 4px;
+      background: #fff;
+      border: 1px solid var(--line);
+      color: var(--ink);
       margin-bottom: 12px;
     }
-    .status.error { background: #f8d7da; border-color: #f1aeb5; color: #58151c; }
+    .status.error { border-width: 2px; border-color: #000; }
     @media (max-width: 900px) {
       .controls { grid-template-columns: repeat(2, minmax(120px, 1fr)); }
+    }
+    @media print {
+      @page { margin: 12mm; }
+      body {
+        background: #fff;
+        color: #000;
+        font-size: 10pt;
+      }
+      .wrap { max-width: none; margin: 0; padding: 0; }
+      .no-print,
+      .controls,
+      .status,
+      .sub,
+      button,
+      #buildBtn { display: none !important; }
+      .legend {
+        margin: 0 0 8px;
+        font-size: 9pt;
+        color: #000;
+      }
+      .scale-title {
+        border: none;
+        border-bottom: 1px solid #000;
+        border-radius: 0;
+        padding: 0 0 6px;
+        margin-bottom: 10px;
+      }
+      .grid {
+        grid-template-columns: repeat(3, 1fr);
+        gap: 8px;
+      }
+      .card {
+        border: 1px solid #999;
+        border-radius: 0;
+        padding: 6px;
+        box-shadow: none;
+      }
+      .register-badge {
+        border-color: #999;
+        color: #000;
+      }
+      .alt-select {
+        border: none;
+        padding: 0;
+        font-size: 8pt;
+        font-weight: 600;
+        pointer-events: none;
+        appearance: none;
+        background: transparent;
+      }
+      .diagram-wrap {
+        border: none;
+        min-height: 0;
+      }
+      .diagram-wrap svg .key:hover .key-fill {
+        fill: #ffffff;
+      }
+      .diagram-wrap svg .key.pressed .key-fill {
+        fill: #cccccc !important;
+        stroke: #000000 !important;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+      }
+      .caption { font-size: 7pt; color: #333; }
     }
   </style>
 </head>
 <body>
   <div class="wrap">
     <h1>Saxophone Key Chart</h1>
-    <p class="sub">Wired to <code>saxophone key-schema-v3.json</code> and <code>sax-key-diagram-v2os.svg</code>.</p>
+    <p class="sub">Works offline — open <code>index.html</code> directly. Edit the JSON/SVG sources, then run <code>node sync-assets.mjs</code>.</p>
 
     <div id="status" class="status" hidden></div>
 
@@ -216,6 +306,8 @@
     <div id="cards" class="grid"></div>
   </div>
 
+  <script src="schema.js"></script>
+  <script src="diagram.js"></script>
   <script>
     const SCHEMA_URL = "saxophone key-schema-v3.json";
     const SVG_URL = "sax-key-diagram-v2os.svg";
@@ -536,31 +628,62 @@
       scaleEl.value = "Major (Ionian)";
     }
 
+    function parseSvgDocument(svgText) {
+      const doc = new DOMParser().parseFromString(svgText, "image/svg+xml");
+      const root = doc.documentElement;
+      if (root.querySelector("parsererror")) {
+        throw new Error("SVG parse error");
+      }
+      return root;
+    }
+
+    function loadEmbeddedSchema() {
+      if (window.SAX_SCHEMA) return window.SAX_SCHEMA;
+      return null;
+    }
+
+    function loadEmbeddedSvgTemplate() {
+      if (!window.SAX_DIAGRAM_SVG) return null;
+      return parseSvgDocument(window.SAX_DIAGRAM_SVG);
+    }
+
+    async function loadSchemaFromNetwork() {
+      const res = await fetch(SCHEMA_URL);
+      if (!res.ok) throw new Error(`Could not load ${SCHEMA_URL} (${res.status})`);
+      return res.json();
+    }
+
+    async function loadSvgFromNetwork() {
+      const res = await fetch(SVG_URL);
+      if (!res.ok) throw new Error(`Could not load ${SVG_URL} (${res.status})`);
+      return parseSvgDocument(await res.text());
+    }
+
     async function loadAssets() {
       showStatus("Loading schema and diagram…");
       try {
-        const [schemaRes, svgRes] = await Promise.all([
-          fetch(SCHEMA_URL),
-          fetch(SVG_URL)
-        ]);
-        if (!schemaRes.ok) throw new Error(`Could not load ${SCHEMA_URL} (${schemaRes.status})`);
-        if (!svgRes.ok) throw new Error(`Could not load ${SVG_URL} (${svgRes.status})`);
+        let source = "embedded";
 
-        schema = await schemaRes.json();
-        const svgText = await svgRes.text();
-        svgTemplate = new DOMParser().parseFromString(svgText, "image/svg+xml").documentElement;
+        schema = loadEmbeddedSchema();
+        svgTemplate = loadEmbeddedSvgTemplate();
 
-        if (svgTemplate.querySelector("parsererror")) {
-          throw new Error("SVG parse error");
+        if (!schema || !svgTemplate) {
+          source = "network";
+          const [networkSchema, networkSvg] = await Promise.all([
+            schema ? Promise.resolve(schema) : loadSchemaFromNetwork(),
+            svgTemplate ? Promise.resolve(svgTemplate) : loadSvgFromNetwork()
+          ]);
+          schema = networkSchema;
+          svgTemplate = networkSvg;
         }
 
         buildFingeringIndexes();
-        schemaInfoEl.textContent = `Schema v${schema.version} · ${schema.fingerings.length} fingerings · ${schema.total_keys} keys`;
+        schemaInfoEl.textContent = `Schema v${schema.version} · ${schema.fingerings.length} fingerings · ${schema.total_keys} keys · ${source}`;
         hideStatus();
         draw();
       } catch (err) {
         showStatus(
-          `${err.message}. Serve this folder over HTTP (e.g. python3 -m http.server) so the browser can load the JSON and SVG files.`,
+          `${err.message}. For offline use, keep schema.js and diagram.js alongside index.html (run node sync-assets.mjs after editing sources).`,
           true
         );
       }
