@@ -4,6 +4,8 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Saxophone Key Chart</title>
+  <link rel="stylesheet" href="https://ka-f.webawesome.com/webawesome@3.7.0/styles/webawesome.css" />
+  <script type="module" src="https://ka-f.webawesome.com/webawesome@3.7.0/webawesome.loader.js"></script>
   <style>
     :root {
       --bg: #ffffff;
@@ -44,7 +46,7 @@
       margin-bottom: 12px;
     }
     label { display: block; font-size: .8rem; color: var(--muted); margin-bottom: 4px; }
-    select, input:not([type="checkbox"]) {
+    select, input[type="number"] {
       width: 100%;
       padding: 8px 10px;
       border: 1px solid var(--line);
@@ -53,15 +55,18 @@
       background: #fff;
       color: var(--ink);
     }
-    .check-field input[type="checkbox"] {
-      width: auto;
-      margin: 0;
-      accent-color: var(--ink);
-    }
-    .check-field .check-row {
+    .switch-field {
       display: flex;
       align-items: center;
       min-height: 38px;
+    }
+    wa-switch {
+      --width: 2.25rem;
+      --height: 1.25rem;
+      --thumb-size: 1rem;
+    }
+    wa-switch::part(base) {
+      color: var(--muted);
     }
     .legend {
       display: flex;
@@ -295,18 +300,11 @@
           <option value="palm">Palm / altissimo</option>
         </select>
       </div>
-      <div>
-        <label for="preferFlats">Prefer flats</label>
-        <select id="preferFlats">
-          <option value="1" selected>Yes</option>
-          <option value="0">No</option>
-        </select>
+      <div class="switch-field">
+        <wa-switch id="preferFlats" checked>Prefer flats</wa-switch>
       </div>
-      <div class="check-field">
-        <label for="darkPressed">Dark pressed fill</label>
-        <div class="check-row">
-          <input id="darkPressed" type="checkbox" checked />
-        </div>
+      <div class="switch-field">
+        <wa-switch id="darkPressed" checked>Dark pressed fill</wa-switch>
       </div>
     </div>
 
@@ -376,7 +374,7 @@
       octaves: "1",
       register: "all",
       flats: "1",
-      dark: "0"
+      dark: "1"
     };
 
     function readUrlState() {
@@ -413,7 +411,7 @@
         registerEl.value = state.register;
       }
       if (state.flats === "0" || state.flats === "1") {
-        preferFlatsEl.value = state.flats;
+        preferFlatsEl.checked = state.flats === "1";
       }
       darkPressedEl.checked = state.dark === "1";
       applyPressedTheme();
@@ -426,7 +424,7 @@
         scale: scaleEl.value,
         octaves: String(Math.max(1, Math.min(3, Number(octavesEl.value) || 1))),
         register: registerEl.value,
-        flats: preferFlatsEl.value,
+        flats: preferFlatsEl.checked ? "1" : "0",
         dark: darkPressedEl.checked ? "1" : "0"
       });
       history.replaceState(null, "", `${location.pathname}?${params.toString()}`);
@@ -572,7 +570,7 @@
     }
 
     function collectEntries() {
-      const preferFlats = preferFlatsEl.value === "1";
+      const preferFlats = preferFlatsEl.checked;
       const registerFilter = registerEl.value;
       const mode = modeEl.value;
 
@@ -713,12 +711,14 @@
     }
 
     function bindControls() {
-      [modeEl, rootEl, scaleEl, registerEl, preferFlatsEl].forEach(el => {
+      [modeEl, rootEl, scaleEl, registerEl].forEach(el => {
+        el.addEventListener("change", onControlsChange);
+      });
+      [preferFlatsEl, darkPressedEl].forEach(el => {
         el.addEventListener("change", onControlsChange);
       });
       octavesEl.addEventListener("change", onControlsChange);
       octavesEl.addEventListener("input", onControlsChange);
-      darkPressedEl.addEventListener("change", onControlsChange);
       window.addEventListener("popstate", () => {
         applyUrlState();
         draw();
