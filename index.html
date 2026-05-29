@@ -11,6 +11,13 @@
       --muted: #444444;
       --line: #bbbbbb;
       --key-pressed: #cccccc;
+      --key-pressed-stroke: #000000;
+      --key-pressed-label: #000000;
+    }
+    body.dark-pressed {
+      --key-pressed: #444;
+      --key-pressed-stroke: #444;
+      --key-pressed-label: #ffffff;
     }
     * { box-sizing: border-box; }
     body {
@@ -37,7 +44,7 @@
       margin-bottom: 12px;
     }
     label { display: block; font-size: .8rem; color: var(--muted); margin-bottom: 4px; }
-    select, input {
+    select, input:not([type="checkbox"]) {
       width: 100%;
       padding: 8px 10px;
       border: 1px solid var(--line);
@@ -45,6 +52,16 @@
       font: inherit;
       background: #fff;
       color: var(--ink);
+    }
+    .check-field input[type="checkbox"] {
+      width: auto;
+      margin: 0;
+      accent-color: var(--ink);
+    }
+    .check-field .check-row {
+      display: flex;
+      align-items: center;
+      min-height: 38px;
     }
     .legend {
       display: flex;
@@ -142,12 +159,12 @@
       fill: #000000;
     }
     .diagram-wrap svg .key.pressed .key-fill {
-      fill: #cccccc;
-      stroke: #000000;
+      fill: var(--key-pressed);
+      stroke: var(--key-pressed-stroke);
     }
     .diagram-wrap svg .key.pressed .key-label,
     .diagram-wrap svg .key.pressed .key-label-sm {
-      fill: #000000;
+      fill: var(--key-pressed-label);
     }
     .diagram-wrap svg .key:hover .key-fill {
       fill: #eeeeee;
@@ -227,10 +244,14 @@
         fill: #ffffff;
       }
       .diagram-wrap svg .key.pressed .key-fill {
-        fill: #cccccc !important;
-        stroke: #000000 !important;
+        fill: var(--key-pressed) !important;
+        stroke: var(--key-pressed-stroke) !important;
         -webkit-print-color-adjust: exact;
         print-color-adjust: exact;
+      }
+      .diagram-wrap svg .key.pressed .key-label,
+      .diagram-wrap svg .key.pressed .key-label-sm {
+        fill: var(--key-pressed-label) !important;
       }
       .caption { font-size: 7pt; color: #333; }
     }
@@ -280,6 +301,12 @@
           <option value="1" selected>Yes</option>
           <option value="0">No</option>
         </select>
+      </div>
+      <div class="check-field">
+        <label for="darkPressed">Dark pressed fill</label>
+        <div class="check-row">
+          <input id="darkPressed" type="checkbox" checked />
+        </div>
       </div>
     </div>
 
@@ -336,6 +363,7 @@
     const octavesEl = document.getElementById("octaves");
     const registerEl = document.getElementById("register");
     const preferFlatsEl = document.getElementById("preferFlats");
+    const darkPressedEl = document.getElementById("darkPressed");
     const titleEl = document.getElementById("title");
     const cardsEl = document.getElementById("cards");
     const schemaInfoEl = document.getElementById("schemaInfo");
@@ -347,7 +375,8 @@
       scale: "Major (Ionian)",
       octaves: "1",
       register: "all",
-      flats: "1"
+      flats: "1",
+      dark: "0"
     };
 
     function readUrlState() {
@@ -358,8 +387,13 @@
         scale: params.get("scale") || URL_DEFAULTS.scale,
         octaves: params.get("octaves") || URL_DEFAULTS.octaves,
         register: params.get("register") || URL_DEFAULTS.register,
-        flats: params.get("flats") || URL_DEFAULTS.flats
+        flats: params.get("flats") || URL_DEFAULTS.flats,
+        dark: params.get("dark") || URL_DEFAULTS.dark
       };
+    }
+
+    function applyPressedTheme() {
+      document.body.classList.toggle("dark-pressed", darkPressedEl.checked);
     }
 
     function applyUrlState() {
@@ -381,6 +415,8 @@
       if (state.flats === "0" || state.flats === "1") {
         preferFlatsEl.value = state.flats;
       }
+      darkPressedEl.checked = state.dark === "1";
+      applyPressedTheme();
     }
 
     function syncUrlState() {
@@ -390,12 +426,14 @@
         scale: scaleEl.value,
         octaves: String(Math.max(1, Math.min(3, Number(octavesEl.value) || 1))),
         register: registerEl.value,
-        flats: preferFlatsEl.value
+        flats: preferFlatsEl.value,
+        dark: darkPressedEl.checked ? "1" : "0"
       });
       history.replaceState(null, "", `${location.pathname}?${params.toString()}`);
     }
 
     function onControlsChange() {
+      applyPressedTheme();
       draw();
     }
 
@@ -680,6 +718,7 @@
       });
       octavesEl.addEventListener("change", onControlsChange);
       octavesEl.addEventListener("input", onControlsChange);
+      darkPressedEl.addEventListener("change", onControlsChange);
       window.addEventListener("popstate", () => {
         applyUrlState();
         draw();
