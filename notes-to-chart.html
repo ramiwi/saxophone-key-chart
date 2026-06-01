@@ -1,0 +1,668 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Notes → key charts</title>
+  <link rel="stylesheet" href="https://ka-f.webawesome.com/webawesome@3.7.0/styles/webawesome.css" />
+  <script type="module" src="https://ka-f.webawesome.com/webawesome@3.7.0/webawesome.loader.js"></script>
+  <script src="nav.js" defer></script>
+  <style>
+    :root {
+      --bg: #ffffff;
+      --ink: #000000;
+      --muted: #444444;
+      --line: #bbbbbb;
+      --key-pressed: #cccccc;
+      --key-pressed-stroke: #000000;
+      --key-pressed-label: #000000;
+      --card-w: 150px;
+      --col-gap: 8px;
+    }
+    body.dark-pressed {
+      --key-pressed: #444;
+      --key-pressed-stroke: #444;
+      --key-pressed-label: #ffffff;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, sans-serif;
+      color: var(--ink);
+      background: var(--bg);
+    }
+    .wrap {
+      max-width: 1400px;
+      margin: 20px auto;
+      padding: 16px;
+    }
+    h1 { margin: 0 0 8px; font-size: 1.35rem; font-weight: 700; }
+    .sub { margin: 0 0 14px; color: var(--muted); font-size: .9rem; }
+    .sub a { color: var(--ink); }
+    .panel {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+    @media (min-width: 900px) {
+      .panel { grid-template-columns: 1fr 1fr; }
+    }
+    label { display: block; font-size: .8rem; color: var(--muted); margin-bottom: 4px; }
+    textarea {
+      width: 100%;
+      min-height: 220px;
+      padding: 10px 12px;
+      border: 1px solid var(--line);
+      border-radius: 4px;
+      font: inherit;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: .85rem;
+      line-height: 1.45;
+      resize: vertical;
+      white-space: pre;
+      overflow-wrap: normal;
+    }
+    .toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+    .toolbar select,
+    .toolbar button {
+      padding: 8px 10px;
+      border: 1px solid var(--line);
+      border-radius: 4px;
+      font: inherit;
+      background: #fff;
+      cursor: pointer;
+    }
+    .switch-field {
+      display: flex;
+      align-items: center;
+      min-height: 38px;
+    }
+    wa-switch {
+      --width: 2.25rem;
+      --height: 1.25rem;
+      --thumb-size: 1rem;
+      --wa-form-control-activated-color: var(--wa-color-gray-60);
+    }
+    .status {
+      padding: 12px;
+      border-radius: 4px;
+      background: #fff;
+      border: 1px solid var(--line);
+      margin-bottom: 12px;
+    }
+    .status.error { border-width: 2px; }
+    .legend {
+      display: flex;
+      gap: 14px;
+      align-items: center;
+      flex-wrap: wrap;
+      margin: 8px 0 12px;
+      font-size: .85rem;
+      color: var(--muted);
+    }
+    .dot {
+      display: inline-block;
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      border: 1.5px solid var(--ink);
+      vertical-align: middle;
+      margin-right: 6px;
+      background: #fff;
+    }
+    .dot.p { background: var(--key-pressed); }
+    .rows {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      overflow-x: auto;
+    }
+    .tutorial-row {
+      border: 1px solid var(--line);
+      border-radius: 4px;
+      padding: 10px;
+      background: #fff;
+      width: max-content;
+      min-width: 100%;
+      break-inside: avoid;
+      page-break-inside: avoid;
+    }
+    .row-label {
+      font-size: .75rem;
+      color: var(--muted);
+      margin-bottom: 8px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+    /* Shared fixed-width columns: a note placed in column N lines up vertically
+       across every row, because all rows use identical track widths. */
+    .row-track {
+      display: grid;
+      align-items: start;
+      column-gap: var(--col-gap);
+    }
+    .card {
+      width: auto;
+      border: 1px solid var(--line);
+      border-radius: 4px;
+      padding: 8px;
+      background: #fff;
+    }
+    .card.missing { border-style: dashed; opacity: 0.9; }
+    .note { margin-bottom: 4px; }
+    .note strong { font-size: 1rem; display: block; }
+    .note small { color: var(--muted); font-size: .75rem; }
+    .register-badge {
+      display: inline-block;
+      margin-top: 2px;
+      padding: 1px 5px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      color: var(--muted);
+      font-size: .65rem;
+      font-weight: 600;
+      text-transform: capitalize;
+    }
+    .alt-select { margin-bottom: 6px; font-size: .75rem; width: 100%; }
+    .diagram-wrap {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 180px;
+      padding: 8px 4px;
+      overflow: hidden;
+    }
+    .diagram-wrap svg {
+      width: 100%;
+      max-width: 140px;
+      height: auto;
+      display: block;
+    }
+    .diagram-wrap svg .key .key-fill {
+      fill: #ffffff;
+      stroke: #000000;
+      stroke-width: 1.5;
+    }
+    .diagram-wrap svg .key .key-label,
+    .diagram-wrap svg .key .key-label-sm { fill: #000000; }
+    .diagram-wrap svg .key.pressed .key-fill {
+      fill: var(--key-pressed);
+      stroke: var(--key-pressed-stroke);
+    }
+    .diagram-wrap svg .key.pressed .key-label,
+    .diagram-wrap svg .key.pressed .key-label-sm {
+      fill: var(--key-pressed-label);
+    }
+    .caption {
+      margin-top: 4px;
+      color: var(--muted);
+      font-size: .68rem;
+      line-height: 1.3;
+      word-break: break-word;
+    }
+    .warn { color: var(--muted); font-size: .8rem; margin-top: 6px; }
+    @media print {
+      .no-print { display: none !important; }
+      .panel { display: none; }
+      .tutorial-row { border-color: #999; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Notes → key charts</h1>
+    <p class="sub">
+      Paste space-separated note rows (e.g. <code>B4           C5</code>). Notes are aligned into shared
+      columns by their character position, so the same column lines up vertically across rows.
+      Same diagrams as <a href="index.html">the key chart</a>.
+    </p>
+
+    <div id="status" class="status" hidden></div>
+
+    <div class="panel no-print">
+      <div>
+        <label for="input">Note lines (one row per line)</label>
+        <textarea id="input" spellcheck="false" placeholder="B3   B4 B4           C5"></textarea>
+      </div>
+      <div>
+        <p class="sub" style="margin-top:0">
+          Notes use scientific pitch: letter, optional <code>#</code> or <code>b</code>, octave (e.g. <code>A#4</code>).
+          Notes that start at the same character position align into the same column down the page —
+          add or remove leading spaces to line things up. Commas are treated like spaces. Empty lines are skipped.
+        </p>
+      </div>
+    </div>
+
+    <div class="toolbar no-print">
+      <button type="button" id="renderBtn">Update diagrams</button>
+      <div class="switch-field">
+        <wa-switch id="preferFlats" checked>Prefer flats</wa-switch>
+      </div>
+      <div class="switch-field">
+        <wa-switch id="darkPressed" checked>Dark pressed fill</wa-switch>
+      </div>
+      <div class="switch-field">
+        <wa-switch id="liveUpdate" checked>Live update</wa-switch>
+      </div>
+      <label>
+        Diagram size
+        <select id="sizeScale">
+          <option value="0.75">75%</option>
+          <option value="1" selected>100%</option>
+          <option value="1.25">125%</option>
+          <option value="1.5">150%</option>
+        </select>
+      </label>
+    </div>
+
+    <div class="legend">
+      <span><span class="dot p"></span>Pressed</span>
+      <span><span class="dot"></span>Open</span>
+      <span id="schemaInfo"></span>
+    </div>
+
+    <div id="rows" class="rows"></div>
+  </div>
+
+  <script src="schema.js"></script>
+  <script src="diagram.js"></script>
+  <script>
+    const SCHEMA_URL = "saxophone key-schema-v3.json";
+    const SVG_URL = "sax-key-diagram-v2os.svg";
+
+    const PITCHES_SHARP = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+    const PITCHES_FLAT = ["C", "Db", "D", "Eb", "E", "F", "Gb", "G", "Ab", "A", "Bb", "B"];
+    const PC_INDEX = {
+      C: 0, "C#": 1, Db: 1, D: 2, "D#": 3, Eb: 3, E: 4, F: 5,
+      "F#": 6, Gb: 6, G: 7, "G#": 8, Ab: 8, A: 9, "A#": 10, Bb: 10, B: 11
+    };
+    const ENHARMONIC = { "C#": "Db", "D#": "Eb", "F#": "Gb", "G#": "Ab", "A#": "Bb" };
+
+    const SAMPLE = `B3   B4 B4           C5
+B4           C5
+B4           C5
+B4           A#4
+A4           B4
+A4           B4
+A4           B4   A4
+A4           G#4
+A4 B4 D5 C5 E4 A4
+F#4           A4
+F#4           B4 A4
+G4 F#4 C4 B3 D#4 F#4 D5 C5 B4
+B4           C5
+B4           C5
+B4           C5
+B4   A#4 A#4 B4 A#4 A4 A#4 G5   F#5   E5
+E5 D#5 C6 D#5 D#5 E5 G5 B4
+D5 C5 E5 F#4 A4 F#4     A4
+F#4           B4 A4
+F#4           F#4   E4
+E4           F#4
+E4           F#4
+E4
+E4       D#4
+E4`;
+
+    let schema = null;
+    let svgTemplate = null;
+    let fingeringByNote = new Map();
+    let fingeringByMidi = new Map();
+
+    const statusEl = document.getElementById("status");
+    const inputEl = document.getElementById("input");
+    const rowsEl = document.getElementById("rows");
+    const preferFlatsEl = document.getElementById("preferFlats");
+    const darkPressedEl = document.getElementById("darkPressed");
+    const sizeScaleEl = document.getElementById("sizeScale");
+    const liveUpdateEl = document.getElementById("liveUpdate");
+    const renderBtn = document.getElementById("renderBtn");
+    const schemaInfoEl = document.getElementById("schemaInfo");
+
+    function showStatus(message, isError = false) {
+      statusEl.hidden = false;
+      statusEl.textContent = message;
+      statusEl.classList.toggle("error", isError);
+    }
+
+    function hideStatus() {
+      statusEl.hidden = true;
+    }
+
+    function applyPressedTheme() {
+      document.body.classList.toggle("dark-pressed", darkPressedEl.checked);
+    }
+
+    function parseScientific(note) {
+      const match = note.match(/^([A-G])(#|b)?(\d+)$/);
+      if (!match) return null;
+      const [, letter, acc, octaveStr] = match;
+      const name = letter + (acc || "");
+      return { name, octave: Number(octaveStr), pc: PC_INDEX[name] };
+    }
+
+    function scientificToMidi(note) {
+      const parsed = parseScientific(note);
+      if (!parsed) return null;
+      return (parsed.octave + 1) * 12 + parsed.pc;
+    }
+
+    function pitchNameFromPc(pc, preferFlats) {
+      const idx = ((pc % 12) + 12) % 12;
+      return preferFlats ? PITCHES_FLAT[idx] : PITCHES_SHARP[idx];
+    }
+
+    function midiToScientific(midi, preferFlats) {
+      const octave = Math.floor(midi / 12) - 1;
+      const pc = ((midi % 12) + 12) % 12;
+      return pitchNameFromPc(pc, preferFlats) + octave;
+    }
+
+    function normalizePitchName(name, preferFlats) {
+      if (PC_INDEX[name] !== undefined) return name;
+      const flat = ENHARMONIC[name];
+      if (flat && preferFlats) return flat;
+      for (const [sharp, flatName] of Object.entries(ENHARMONIC)) {
+        if (flatName === name && !preferFlats) return sharp;
+      }
+      return name;
+    }
+
+    function buildFingeringIndexes() {
+      fingeringByNote = new Map();
+      fingeringByMidi = new Map();
+      for (const entry of schema.fingerings) {
+        fingeringByNote.set(entry.note, entry);
+        const midi = scientificToMidi(entry.note);
+        if (midi !== null && !fingeringByMidi.has(midi)) {
+          fingeringByMidi.set(midi, entry);
+        }
+      }
+    }
+
+    function lookupFingering(scientificNote, preferFlats) {
+      const direct = fingeringByNote.get(scientificNote);
+      if (direct) return direct;
+
+      const parsed = parseScientific(scientificNote);
+      if (!parsed) return null;
+
+      const byMidi = fingeringByMidi.get(scientificToMidi(scientificNote));
+      if (byMidi) return byMidi;
+
+      const normalized = normalizePitchName(parsed.name, preferFlats) + parsed.octave;
+      return fingeringByNote.get(normalized) || null;
+    }
+
+    // Display label honors the Prefer-flats toggle, like index.html.
+    function displayNoteName(entry, preferFlats) {
+      const midi = scientificToMidi(entry.note);
+      return midi === null ? entry.note : midiToScientific(midi, preferFlats);
+    }
+
+    function getFingeringOptions(entry) {
+      const options = [{
+        label: entry.display_label,
+        keys: entry.pressed_keys
+      }];
+      for (const alt of entry.alternatives || []) {
+        options.push({
+          label: alt.display_label || alt.name,
+          keys: alt.pressed_keys
+        });
+      }
+      return options;
+    }
+
+    function cloneDiagram(pressedKeys, label) {
+      const svg = svgTemplate.cloneNode(true);
+      svg.removeAttribute("width");
+      svg.removeAttribute("height");
+      svg.removeAttribute("aria-labelledby");
+      svg.setAttribute("role", "img");
+      svg.setAttribute("aria-label", label || "Sax fingering diagram");
+      // Drop the document-level title/desc/metadata so cloning many diagrams
+      // doesn't litter the page with duplicate id="title"/id="desc" nodes.
+      // Per-key <title> tooltips (no ids) are kept.
+      svg.querySelectorAll(":scope > title, :scope > desc, :scope > metadata")
+        .forEach(el => el.remove());
+      const pressed = new Set(pressedKeys);
+      svg.querySelectorAll(".key[data-key]").forEach(keyEl => {
+        if (pressed.has(keyEl.dataset.key)) keyEl.classList.add("pressed");
+      });
+      return svg;
+    }
+
+    // Returns note tokens with the character offset where each note starts,
+    // which drives the shared-column alignment across rows.
+    function tokenizeLine(line) {
+      const normalized = line.replace(/,/g, " ");
+      const tokens = [];
+      let i = 0;
+      const noteRe = /^([A-G])([#b])?(\d+)/;
+
+      while (i < normalized.length) {
+        if (/\S/.test(normalized[i])) {
+          const rest = normalized.slice(i);
+          const m = rest.match(noteRe);
+          if (m) {
+            tokens.push({ type: "note", text: m[0], offset: i });
+            i += m[0].length;
+          } else {
+            const bad = rest.match(/^\S+/)[0];
+            tokens.push({ type: "unknown", text: bad, offset: i });
+            i += bad.length;
+          }
+        } else {
+          let j = i;
+          while (j < normalized.length && /\s/.test(normalized[j])) j++;
+          i = j;
+        }
+      }
+      return tokens;
+    }
+
+    function renderNoteCard(tokenText, preferFlats) {
+      const card = document.createElement("article");
+      card.className = "card";
+
+      const entry = lookupFingering(tokenText, preferFlats);
+      if (!entry) {
+        card.classList.add("missing");
+        const noteDiv = document.createElement("div");
+        noteDiv.className = "note";
+        const strong = document.createElement("strong");
+        strong.textContent = tokenText;
+        const small = document.createElement("small");
+        small.textContent = "Not in schema";
+        noteDiv.append(strong, small);
+        const cap = document.createElement("p");
+        cap.className = "caption";
+        cap.textContent = "No fingering found for this pitch.";
+        card.append(noteDiv, cap);
+        return card;
+      }
+
+      const noteName = displayNoteName(entry, preferFlats);
+      const options = getFingeringOptions(entry);
+      let activeOption = options[0];
+
+      const noteHeader = document.createElement("div");
+      noteHeader.className = "note";
+      const strong = document.createElement("strong");
+      strong.textContent = noteName;
+      const small = document.createElement("small");
+      small.textContent = entry.display_label;
+      const badge = document.createElement("span");
+      badge.className = "register-badge";
+      badge.textContent = entry.register;
+      noteHeader.append(strong, small, badge);
+      card.appendChild(noteHeader);
+
+      const diagramWrap = document.createElement("div");
+      diagramWrap.className = "diagram-wrap";
+      const caption = document.createElement("div");
+      caption.className = "caption";
+
+      function paintDiagram() {
+        diagramWrap.replaceChildren(cloneDiagram(activeOption.keys, `${noteName} fingering`));
+        caption.textContent = activeOption.keys.length
+          ? activeOption.keys.join(", ")
+          : "Open (no keys pressed)";
+      }
+
+      if (options.length > 1) {
+        const altSelect = document.createElement("select");
+        altSelect.className = "alt-select";
+        altSelect.setAttribute("aria-label", `Fingering for ${noteName}`);
+        options.forEach((option, idx) => {
+          const opt = document.createElement("option");
+          opt.value = String(idx);
+          opt.textContent = option.label;
+          altSelect.appendChild(opt);
+        });
+        altSelect.addEventListener("change", () => {
+          activeOption = options[Number(altSelect.value)];
+          paintDiagram();
+        });
+        card.appendChild(altSelect);
+      }
+
+      paintDiagram();
+      card.appendChild(diagramWrap);
+      card.appendChild(caption);
+      return card;
+    }
+
+    function renderRows() {
+      if (!schema || !svgTemplate) return;
+
+      applyPressedTheme();
+      const preferFlats = preferFlatsEl.checked;
+      const sizeScale = Number(sizeScaleEl.value) || 1;
+      rowsEl.style.setProperty("--card-w", `${Math.round(150 * sizeScale)}px`);
+      const warnings = [];
+
+      // First pass: tokenize every non-empty line and collect the set of note
+      // start offsets. Each distinct offset becomes one shared grid column.
+      const parsedRows = [];
+      const offsets = new Set();
+      for (const line of inputEl.value.split(/\r?\n/)) {
+        if (!line.trim()) continue;
+        const tokens = tokenizeLine(line);
+        parsedRows.push(tokens);
+        for (const token of tokens) {
+          if (token.type === "note") offsets.add(token.offset);
+        }
+      }
+
+      const columns = [...offsets].sort((a, b) => a - b);
+      const colIndex = new Map(columns.map((offset, idx) => [offset, idx]));
+
+      rowsEl.replaceChildren();
+
+      if (!parsedRows.length) {
+        const empty = document.createElement("p");
+        empty.className = "warn";
+        empty.textContent = "Paste note lines above, then click Update diagrams.";
+        rowsEl.appendChild(empty);
+        return;
+      }
+
+      parsedRows.forEach((tokens, idx) => {
+        const rowNum = idx + 1;
+        const row = document.createElement("section");
+        row.className = "tutorial-row";
+
+        const label = document.createElement("div");
+        label.className = "row-label";
+        label.textContent = `Row ${rowNum}`;
+        row.appendChild(label);
+
+        const track = document.createElement("div");
+        track.className = "row-track";
+        track.style.gridTemplateColumns = `repeat(${columns.length}, var(--card-w))`;
+
+        for (const token of tokens) {
+          if (token.type === "note") {
+            const card = renderNoteCard(token.text, preferFlats);
+            card.style.gridColumn = String(colIndex.get(token.offset) + 1);
+            track.appendChild(card);
+          } else {
+            warnings.push(`Row ${rowNum}: skipped "${token.text}"`);
+          }
+        }
+
+        row.appendChild(track);
+        rowsEl.appendChild(row);
+      });
+
+      if (warnings.length) {
+        const w = document.createElement("p");
+        w.className = "warn";
+        w.textContent = warnings.slice(0, 8).join(" · ") + (warnings.length > 8 ? " …" : "");
+        rowsEl.appendChild(w);
+      }
+    }
+
+    function parseSvgDocument(svgText) {
+      const doc = new DOMParser().parseFromString(svgText, "image/svg+xml");
+      const root = doc.documentElement;
+      if (root.querySelector("parsererror")) throw new Error("SVG parse error");
+      return root;
+    }
+
+    async function loadAssets() {
+      showStatus("Loading schema and diagram…");
+      try {
+        let source = "embedded";
+        schema = window.SAX_SCHEMA || null;
+        svgTemplate = window.SAX_DIAGRAM_SVG
+          ? parseSvgDocument(window.SAX_DIAGRAM_SVG)
+          : null;
+
+        if (!schema || !svgTemplate) {
+          source = "network";
+          if (!schema) {
+            const res = await fetch(SCHEMA_URL);
+            if (!res.ok) throw new Error(`Could not load ${SCHEMA_URL} (${res.status})`);
+            schema = await res.json();
+          }
+          if (!svgTemplate) {
+            const res = await fetch(SVG_URL);
+            if (!res.ok) throw new Error(`Could not load ${SVG_URL} (${res.status})`);
+            svgTemplate = parseSvgDocument(await res.text());
+          }
+        }
+
+        buildFingeringIndexes();
+        schemaInfoEl.textContent = `Schema v${schema.version} · ${schema.fingerings.length} fingerings · ${schema.total_keys} keys · ${source}`;
+        hideStatus();
+        renderRows();
+      } catch (err) {
+        showStatus(
+          `${err.message}. Keep schema.js and diagram.js alongside this file (run node sync-assets.mjs).`,
+          true
+        );
+      }
+    }
+
+    inputEl.value = SAMPLE;
+    renderBtn.addEventListener("click", renderRows);
+    inputEl.addEventListener("input", () => {
+      if (liveUpdateEl.checked) renderRows();
+    });
+    [preferFlatsEl, darkPressedEl, sizeScaleEl].forEach(el => {
+      el.addEventListener("change", renderRows);
+    });
+
+    loadAssets();
+  </script>
+</body>
+</html>
