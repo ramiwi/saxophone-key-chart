@@ -207,6 +207,7 @@
       word-break: break-word;
     }
     .warn { color: var(--muted); font-size: .8rem; margin-top: 6px; }
+    .hint { font-size: .8rem; color: var(--muted); }
     @media print {
       .no-print { display: none !important; }
       .panel { display: none; }
@@ -259,6 +260,17 @@
           <option value="1.5">150%</option>
         </select>
       </label>
+    </div>
+
+    <div class="toolbar no-print">
+      <label>
+        Presets
+        <select id="presetSelect"></select>
+      </label>
+      <button type="button" id="savePresetBtn">Save preset</button>
+      <button type="button" id="deletePresetBtn">Delete</button>
+      <button type="button" id="copyLinkBtn">Copy shareable link</button>
+      <span id="saveStatus" class="hint" role="status" aria-live="polite"></span>
     </div>
 
     <div class="legend">
@@ -324,6 +336,11 @@ E4`;
     const liveUpdateEl = document.getElementById("liveUpdate");
     const renderBtn = document.getElementById("renderBtn");
     const schemaInfoEl = document.getElementById("schemaInfo");
+    const presetSelectEl = document.getElementById("presetSelect");
+    const savePresetBtn = document.getElementById("savePresetBtn");
+    const deletePresetBtn = document.getElementById("deletePresetBtn");
+    const copyLinkBtn = document.getElementById("copyLinkBtn");
+    const saveStatusEl = document.getElementById("saveStatus");
 
     function showStatus(message, isError = false) {
       statusEl.hidden = false;
@@ -653,9 +670,132 @@ E4`;
       }
     }
 
-    inputEl.value = SAMPLE;
+    // ---- Persistence: auto-saved draft, named presets, shareable link ----
+    const LS_DRAFT = "notesToChart.draft";
+    const LS_PRESETS = "notesToChart.presets";
+    let flashTimer = null;
+
+    function flash(message) {
+      saveStatusEl.textContent = message;
+      clearTimeout(flashTimer);
+      flashTimer = setTimeout(() => { saveStatusEl.textContent = ""; }, 2500);
+    }
+
+    function saveDraft(text) {
+      try { localStorage.setItem(LS_DRAFT, text); } catch (e) { /* storage unavailable */ }
+    }
+
+    function loadDraft() {
+      try { return localStorage.getItem(LS_DRAFT); } catch (e) { return null; }
+    }
+
+    function loadPresets() {
+      try { return JSON.parse(localStorage.getItem(LS_PRESETS)) || {}; }
+      catch (e) { return {}; }
+    }
+
+    function storePresets(presets) {
+      try { localStorage.setItem(LS_PRESETS, JSON.stringify(presets)); }
+      catch (e) { flash("Couldn't save — storage is full or unavailable."); }
+    }
+
+    function refreshPresetSelect(selectedName) {
+      const presets = loadPresets();
+      const names = Object.keys(presets).sort((a, b) => a.localeCompare(b));
+      presetSelectEl.replaceChildren();
+      const placeholder = document.createElement("option");
+      placeholder.value = "";
+      placeholder.textContent = names.length ? "Load preset…" : "No saved presets";
+      presetSelectEl.appendChild(placeholder);
+      for (const name of names) {
+        const opt = document.createElement("option");
+        opt.value = name;
+        opt.textContent = name;
+        presetSelectEl.appendChild(opt);
+      }
+      presetSelectEl.value = selectedName && presets[selectedName] !== undefined ? selectedName : "";
+    }
+
+    function decodeNotesFromHash() {
+      const match = location.hash.match(/(?:^#|&)notes=([^&]*)/);
+      if (!match) return null;
+      try { return decodeURIComponent(match[1]); } catch (e) { return null; }
+    }
+
+    function buildShareUrl(text) {
+      const url = new URL(location.href);
+      url.hash = "notes=" + encodeURIComponent(text);
+      return url.toString();
+    }
+
+    async function copyShareLink() {
+      const url = buildShareUrl(inputEl.value);
+      try {
+        await navigator.clipboard.writeText(url);
+        flash("Shareable link copied to clipboard.");
+      } catch (e) {
+        history.replaceState(null, "", url);
+        flash("Link is now in the address bar — copy it from there.");
+      }
+    }
+
+    presetSelectEl.addEventListener("change", () => {
+      const name = presetSelectEl.value;
+      if (!name) return;
+      const presets = loadPresets();
+      if (presets[name] === undefined) return;
+      inputEl.value = presets[name];
+      saveDraft(inputEl.value);
+      renderRows();
+      flash(`Loaded “${name}”.`);
+    });
+
+    savePresetBtn.addEventListener("click", () => {
+      const suggested = presetSelectEl.value || "";
+      const name = (prompt("Save preset as:", suggested) || "").trim();
+      if (!name) return;
+      const presets = loadPresets();
+      presets[name] = inputEl.value;
+      storePresets(presets);
+      refreshPresetSelect(name);
+      flash(`Saved “${name}”.`);
+    });
+
+    deletePresetBtn.addEventListener("click", () => {
+      const name = presetSelectEl.value;
+      if (!name) { flash("Pick a preset to delete first."); return; }
+      if (!confirm(`Delete preset “${name}”?`)) return;
+      const presets = loadPresets();
+      delete presets[name];
+      storePresets(presets);
+      refreshPresetSelect("");
+      flash(`Deleted “${name}”.`);
+    });
+
+    copyLinkBtn.addEventListener("click", copyShareLink);
+
+    window.addEventListener("hashchange", () => {
+      const shared = decodeNotesFromHash();
+      if (shared !== null && shared !== inputEl.value) {
+        inputEl.value = shared;
+        saveDraft(shared);
+        renderRows();
+        flash("Loaded notes from link.");
+      }
+    });
+
+    // ---- Init: shared link wins, then saved draft, then the built-in sample ----
+    const sharedNotes = decodeNotesFromHash();
+    const draftNotes = loadDraft();
+    inputEl.value = sharedNotes !== null ? sharedNotes
+      : draftNotes !== null ? draftNotes
+      : SAMPLE;
+    saveDraft(inputEl.value);
+    refreshPresetSelect("");
+
     renderBtn.addEventListener("click", renderRows);
     inputEl.addEventListener("input", () => {
+      saveDraft(inputEl.value);
       if (liveUpdateEl.checked) renderRows();
     });
     [preferFlatsEl, darkPressedEl, sizeScaleEl].forEach(el => {
