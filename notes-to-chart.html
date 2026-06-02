@@ -36,6 +36,8 @@
       margin: 20px auto;
       padding: 16px;
     }
+    body.no-margins .wrap { max-width: none; margin: 0; padding: 0; }
+    body.tight-rows .tutorial-row { padding: 0; border-width: 0; }
     h1 { margin: 0 0 8px; font-size: 1.35rem; font-weight: 700; }
     .sub { margin: 0 0 14px; color: var(--muted); font-size: .9rem; }
     .sub a { color: var(--ink); }
@@ -71,6 +73,7 @@
       margin-bottom: 12px;
     }
     .toolbar select,
+    .toolbar input[type="text"],
     .toolbar button {
       padding: 8px 10px;
       border: 1px solid var(--line);
@@ -147,6 +150,7 @@
       display: grid;
       align-items: start;
       column-gap: var(--col-gap);
+      grid-template-columns: repeat(var(--col-count, 1), var(--card-w));
     }
     .card {
       width: auto;
@@ -210,9 +214,26 @@
     .warn { color: var(--muted); font-size: .8rem; margin-top: 6px; }
     .hint { font-size: .8rem; color: var(--muted); }
     @media print {
+      @page { size: A4 landscape; margin: 8mm; }
       .no-print { display: none !important; }
-      .panel { display: none; }
-      .tutorial-row { border-color: #999; }
+      .panel, .sub, .legend, #status { display: none !important; }
+      html, body { background: #fff; }
+      .wrap { max-width: none; margin: 0; padding: 0; }
+      h1 { font-size: 1.1rem; margin-bottom: 6px; }
+      .rows { gap: 8px; overflow: visible; }
+      /* Drop the fixed pixel column width so wide rows shrink to fit the page;
+         all rows share the same column count, so vertical alignment is kept. */
+      .tutorial-row {
+        width: auto;
+        min-width: 0;
+        padding: 6px;
+        border-color: #999;
+      }
+      .row-track { grid-template-columns: repeat(var(--col-count, 1), minmax(0, 1fr)); }
+      .card { padding: 4px; }
+      .diagram-wrap { min-height: 0; padding: 4px 2px; }
+      .diagram-wrap svg { max-width: 100%; }
+      .alt-select { display: none; }
     }
   </style>
 </head>
@@ -252,6 +273,32 @@
       <div class="switch-field">
         <wa-switch id="liveUpdate" checked>Live update</wa-switch>
       </div>
+      <div class="switch-field">
+        <wa-switch id="hideEmpty">Hide empty cells</wa-switch>
+      </div>
+      <div class="switch-field">
+        <wa-switch id="hideAltSelect">Hide fingering selectors</wa-switch>
+      </div>
+      <div class="switch-field">
+        <wa-switch id="hidePalmSpatula">Hide palm &amp; spatula keys</wa-switch>
+      </div>
+      <div class="switch-field">
+        <wa-switch id="noMargins">No page margins</wa-switch>
+      </div>
+      <div class="switch-field">
+        <wa-switch id="tightRows">No row padding/border</wa-switch>
+      </div>
+      <label>
+        Default fingering
+        <input type="text" id="defaultFingering" list="fingeringPrefs"
+               placeholder="e.g. side" autocomplete="off" />
+        <datalist id="fingeringPrefs">
+          <option value="side"></option>
+          <option value="front"></option>
+          <option value="fork"></option>
+          <option value="bis"></option>
+        </datalist>
+      </label>
       <label>
         Diagram size
         <select id="sizeScale">
@@ -335,6 +382,15 @@ E4`;
     const darkPressedEl = document.getElementById("darkPressed");
     const sizeScaleEl = document.getElementById("sizeScale");
     const liveUpdateEl = document.getElementById("liveUpdate");
+    const hideEmptyEl = document.getElementById("hideEmpty");
+    const hideAltSelectEl = document.getElementById("hideAltSelect");
+    const hidePalmSpatulaEl = document.getElementById("hidePalmSpatula");
+    const noMarginsEl = document.getElementById("noMargins");
+    const tightRowsEl = document.getElementById("tightRows");
+    const defaultFingeringEl = document.getElementById("defaultFingering");
+
+    // The 3 palm keys (Palm D/Eb/F) and 4 spatula keys (G#, low B/C#/Bb).
+    const PALM_SPATULA_KEYS = ["C1", "C2", "C4", "G_sharp", "B_low", "C_sharp_low", "Bb_low"];
     const renderBtn = document.getElementById("renderBtn");
     const schemaInfoEl = document.getElementById("schemaInfo");
     const presetSelectEl = document.getElementById("presetSelect");
@@ -355,6 +411,11 @@ E4`;
 
     function applyPressedTheme() {
       document.body.classList.toggle("dark-pressed", darkPressedEl.checked);
+    }
+
+    function applyLayoutToggles() {
+      document.body.classList.toggle("no-margins", noMarginsEl.checked);
+      document.body.classList.toggle("tight-rows", tightRowsEl.checked);
     }
 
     function parseScientific(note) {
@@ -450,11 +511,44 @@ E4`;
       // Per-key <title> tooltips (no ids) are kept.
       svg.querySelectorAll(":scope > title, :scope > desc, :scope > metadata")
         .forEach(el => el.remove());
+      const hidden = hidePalmSpatulaEl.checked ? new Set(PALM_SPATULA_KEYS) : null;
       const pressed = new Set(pressedKeys);
       svg.querySelectorAll(".key[data-key]").forEach(keyEl => {
+        if (hidden && hidden.has(keyEl.dataset.key)) { keyEl.remove(); return; }
         if (pressed.has(keyEl.dataset.key)) keyEl.classList.add("pressed");
       });
+      // Removing keys leaves the old viewBox (and its blank right-side margin)
+      // unchanged, so tighten the viewBox to the remaining geometry.
+      if (hidden) {
+        const box = getTrimmedViewBox();
+        if (box) svg.setAttribute("viewBox", box);
+      }
       return svg;
+    }
+
+    // The geometry is identical for every diagram, so measure the trimmed
+    // bounding box (palm/spatula keys removed) once and reuse it. getBBox needs
+    // the node rendered, so measure off-screen.
+    let trimmedViewBox = null;
+    function getTrimmedViewBox() {
+      if (trimmedViewBox) return trimmedViewBox;
+      const probe = svgTemplate.cloneNode(true);
+      const hide = new Set(PALM_SPATULA_KEYS);
+      probe.querySelectorAll(".key[data-key]").forEach(keyEl => {
+        if (hide.has(keyEl.dataset.key)) keyEl.remove();
+      });
+      probe.setAttribute("style", "position:absolute;visibility:hidden;width:300px;height:auto");
+      document.body.appendChild(probe);
+      try {
+        const b = probe.getBBox();
+        const pad = 4;
+        trimmedViewBox = `${b.x - pad} ${b.y - pad} ${b.width + 2 * pad} ${b.height + 2 * pad}`;
+      } catch (e) {
+        trimmedViewBox = null;
+      } finally {
+        probe.remove();
+      }
+      return trimmedViewBox;
     }
 
     // Returns note tokens with the character offset where each note starts,
@@ -509,7 +603,15 @@ E4`;
 
       const noteName = displayNoteName(entry, preferFlats);
       const options = getFingeringOptions(entry);
-      let activeOption = options[0];
+      // Honor the global default-fingering preference: pick the first option
+      // whose label contains the keyword (e.g. "side"), else the primary one.
+      const pref = (defaultFingeringEl.value || "").trim().toLowerCase();
+      let defaultIdx = 0;
+      if (pref) {
+        const match = options.findIndex(o => (o.label || "").toLowerCase().includes(pref));
+        if (match >= 0) defaultIdx = match;
+      }
+      let activeOption = options[defaultIdx];
 
       const noteHeader = document.createElement("div");
       noteHeader.className = "note";
@@ -535,7 +637,7 @@ E4`;
           : "Open (no keys pressed)";
       }
 
-      if (options.length > 1) {
+      if (options.length > 1 && !hideAltSelectEl.checked) {
         const altSelect = document.createElement("select");
         altSelect.className = "alt-select";
         altSelect.setAttribute("aria-label", `Fingering for ${noteName}`);
@@ -545,6 +647,7 @@ E4`;
           opt.textContent = option.label;
           altSelect.appendChild(opt);
         });
+        altSelect.value = String(defaultIdx);
         altSelect.addEventListener("change", () => {
           activeOption = options[Number(altSelect.value)];
           paintDiagram();
@@ -558,13 +661,32 @@ E4`;
       return card;
     }
 
+    // Number of shared columns in the current layout, kept so we can re-fit the
+    // card width on window resize without re-tokenizing the input.
+    let lastColCount = 0;
+
+    // Pick the largest card width that still lets every column fit the available
+    // width (so the chart never needs horizontal scrolling), capped by the
+    // user's chosen Diagram size. The row's own padding/border and the
+    // inter-column gaps are subtracted from the usable width.
+    function fitCardWidth() {
+      if (!lastColCount) return;
+      const ROW_CHROME = tightRowsEl.checked ? 0 : 22; // .tutorial-row padding (10*2) + border (1*2)
+      const COL_GAP = 8;       // matches --col-gap
+      const sizeScale = Number(sizeScaleEl.value) || 1;
+      const preferred = Math.round(150 * sizeScale);
+      const available = rowsEl.clientWidth - ROW_CHROME - (lastColCount - 1) * COL_GAP;
+      const fit = Math.floor(available / lastColCount);
+      const cardW = Math.max(48, Math.min(preferred, fit));
+      rowsEl.style.setProperty("--card-w", `${cardW}px`);
+    }
+
     function renderRows() {
       if (!schema || !svgTemplate) return;
 
       applyPressedTheme();
+      applyLayoutToggles();
       const preferFlats = preferFlatsEl.checked;
-      const sizeScale = Number(sizeScaleEl.value) || 1;
-      rowsEl.style.setProperty("--card-w", `${Math.round(150 * sizeScale)}px`);
       const warnings = [];
 
       // First pass: tokenize every non-empty line and collect the set of note
@@ -582,6 +704,15 @@ E4`;
 
       const columns = [...offsets].sort((a, b) => a - b);
       const colIndex = new Map(columns.map((offset, idx) => [offset, idx]));
+
+      // Compact mode drops the blank placeholder columns: each row just packs
+      // its own diagrams left-to-right, so cards no longer line up across rows.
+      const hideEmpty = hideEmptyEl.checked;
+      const maxNotesPerRow = parsedRows.reduce(
+        (max, tokens) => Math.max(max, tokens.filter(t => t.type === "note").length), 0);
+
+      lastColCount = hideEmpty ? maxNotesPerRow : columns.length;
+      fitCardWidth();
 
       rowsEl.replaceChildren();
 
@@ -605,12 +736,13 @@ E4`;
 
         const track = document.createElement("div");
         track.className = "row-track";
-        track.style.gridTemplateColumns = `repeat(${columns.length}, var(--card-w))`;
+        const noteCount = tokens.filter(t => t.type === "note").length;
+        track.style.setProperty("--col-count", String(hideEmpty ? noteCount : columns.length));
 
         for (const token of tokens) {
           if (token.type === "note") {
             const card = renderNoteCard(token.text, preferFlats);
-            card.style.gridColumn = String(colIndex.get(token.offset) + 1);
+            if (!hideEmpty) card.style.gridColumn = String(colIndex.get(token.offset) + 1);
             track.appendChild(card);
           } else {
             warnings.push(`Row ${rowNum}: skipped "${token.text}"`);
@@ -717,25 +849,59 @@ E4`;
       presetSelectEl.value = selectedName && presets[selectedName] !== undefined ? selectedName : "";
     }
 
-    function decodeNotesFromHash() {
-      const match = location.hash.match(/(?:^#|&)notes=([^&]*)/);
-      if (!match) return null;
-      try { return decodeURIComponent(match[1]); } catch (e) { return null; }
+    // ---- All UI settings are persisted in the URL hash as query params ----
+    // Each switch is stored as a "1"/"0" flag under a short key.
+    const BOOL_SETTINGS = {
+      flats: preferFlatsEl,
+      dark: darkPressedEl,
+      live: liveUpdateEl,
+      empty: hideEmptyEl,
+      noalt: hideAltSelectEl,
+      nopalm: hidePalmSpatulaEl,
+      nomar: noMarginsEl,
+      tight: tightRowsEl
+    };
+
+    function setSwitch(el, on) {
+      el.checked = on;
+      el.toggleAttribute("checked", on);
     }
 
-    function buildShareUrl(text) {
-      const url = new URL(location.href);
-      url.hash = "notes=" + encodeURIComponent(text);
-      return url.toString();
+    function buildHash(text) {
+      const p = new URLSearchParams();
+      if (text) p.set("notes", text);
+      for (const [key, el] of Object.entries(BOOL_SETTINGS)) {
+        p.set(key, el.checked ? "1" : "0");
+      }
+      p.set("size", sizeScaleEl.value);
+      const def = defaultFingeringEl.value.trim();
+      if (def) p.set("def", def);
+      return "#" + p.toString();
+    }
+
+    function parseHash() {
+      return new URLSearchParams(location.hash.replace(/^#/, ""));
+    }
+
+    function applySettingsFromParams(p) {
+      for (const [key, el] of Object.entries(BOOL_SETTINGS)) {
+        if (p.has(key)) setSwitch(el, p.get(key) === "1");
+      }
+      if (p.has("size")) sizeScaleEl.value = p.get("size");
+      if (p.has("def")) defaultFingeringEl.value = p.get("def");
+    }
+
+    // Reflect the current notes + settings into the address bar (no history spam).
+    function syncUrl() {
+      history.replaceState(null, "", buildHash(inputEl.value));
     }
 
     async function copyShareLink() {
-      const url = buildShareUrl(inputEl.value);
+      syncUrl();
       try {
-        await navigator.clipboard.writeText(url);
+        await navigator.clipboard.writeText(location.href);
         flash("Shareable link copied to clipboard.");
       } catch (e) {
-        history.replaceState(null, "", url);
         flash("Link is now in the address bar — copy it from there.");
       }
     }
@@ -748,6 +914,7 @@ E4`;
       inputEl.value = presets[name];
       saveDraft(inputEl.value);
       renderRows();
+      syncUrl();
       flash(`Loaded “${name}”.`);
     });
 
@@ -776,31 +943,47 @@ E4`;
     copyLinkBtn.addEventListener("click", copyShareLink);
 
     window.addEventListener("hashchange", () => {
-      const shared = decodeNotesFromHash();
+      const p = parseHash();
+      applySettingsFromParams(p);
+      const shared = p.get("notes");
       if (shared !== null && shared !== inputEl.value) {
         inputEl.value = shared;
         saveDraft(shared);
-        renderRows();
-        flash("Loaded notes from link.");
       }
+      renderRows();
+      flash("Loaded from link.");
     });
 
-    // ---- Init: shared link wins, then saved draft, then the built-in sample ----
-    const sharedNotes = decodeNotesFromHash();
+    // ---- Init: link params win, then saved draft, then the built-in sample ----
+    const initParams = parseHash();
+    applySettingsFromParams(initParams);
+    const sharedNotes = initParams.get("notes");
     const draftNotes = loadDraft();
     inputEl.value = sharedNotes !== null ? sharedNotes
       : draftNotes !== null ? draftNotes
       : SAMPLE;
     saveDraft(inputEl.value);
     refreshPresetSelect("");
+    syncUrl();
 
     renderBtn.addEventListener("click", renderRows);
     inputEl.addEventListener("input", () => {
       saveDraft(inputEl.value);
+      syncUrl();
       if (liveUpdateEl.checked) renderRows();
     });
-    [preferFlatsEl, darkPressedEl, sizeScaleEl].forEach(el => {
-      el.addEventListener("change", renderRows);
+    [preferFlatsEl, darkPressedEl, sizeScaleEl, hideEmptyEl, hideAltSelectEl,
+     hidePalmSpatulaEl, noMarginsEl, tightRowsEl].forEach(el => {
+      el.addEventListener("change", () => { renderRows(); syncUrl(); });
+    });
+    liveUpdateEl.addEventListener("change", syncUrl);
+    defaultFingeringEl.addEventListener("input", () => { renderRows(); syncUrl(); });
+
+    // Re-fit the cards to the viewport when it changes, without a full re-render.
+    let resizeTimer = null;
+    window.addEventListener("resize", () => {
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(fitCardWidth, 120);
     });
 
     loadAssets();
