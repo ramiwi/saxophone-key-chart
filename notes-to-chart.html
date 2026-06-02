@@ -154,6 +154,34 @@
       background: var(--line);
       margin: 2px 4px;
     }
+    .toolbar.actions {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      background: var(--bg);
+      padding: 8px 0;
+      border-bottom: 1px solid var(--line);
+    }
+    .field-label { display: inline-flex; align-items: center; gap: 4px; }
+    .help {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 14px;
+      height: 14px;
+      border: 1px solid var(--line);
+      border-radius: 50%;
+      color: var(--muted);
+      font-size: .6rem;
+      font-weight: 700;
+      cursor: help;
+      user-select: none;
+    }
+    .group .switch-field.master {
+      border-bottom: 1px solid var(--line);
+      padding-bottom: 4px;
+      margin-bottom: 2px;
+    }
     .status {
       padding: 12px;
       border-radius: 4px;
@@ -339,7 +367,9 @@
           <wa-switch id="darkPressed" checked>Dark pressed fill</wa-switch>
         </div>
         <label class="field">
-          Default fingering
+          <span class="field-label">Default fingering
+            <span class="help" title="When a note has alternate fingerings, auto-select the one whose label contains this word (e.g. 'side'). Leave blank to use the primary fingering.">?</span>
+          </span>
           <input type="text" id="defaultFingering" list="fingeringPrefs"
                  placeholder="e.g. side" autocomplete="off" />
           <datalist id="fingeringPrefs">
@@ -360,11 +390,15 @@
       <fieldset class="group">
         <legend>Layout</legend>
         <label class="field">
-          Diagrams per row
+          <span class="field-label">Diagrams per row
+            <span class="help" title="Fixed number of equal-size diagrams per row; any extras wrap onto a new line. Clear this to align notes by character position instead.">?</span>
+          </span>
           <input type="number" id="perRow" min="1" max="40" step="1" value="10" />
         </label>
         <label class="field">
-          Diagram size
+          <span class="field-label">Diagram size
+            <span class="help" title="Target diagram size. Diagrams only shrink below this if a row would otherwise overflow the page width.">?</span>
+          </span>
           <select id="sizeScale">
             <option value="0.4">40%</option>
             <option value="0.5">50%</option>
@@ -376,7 +410,9 @@
           </select>
         </label>
         <label class="field">
-          Column gap (px)
+          <span class="field-label">Column gap (px)
+            <span class="help" title="Horizontal space between diagrams. When the chosen size leaves room, this is pure spacing; at full density it trades off with diagram size.">?</span>
+          </span>
           <input type="number" id="colGap" min="0" max="40" step="1" value="8" />
         </label>
         <label class="field">
@@ -399,6 +435,9 @@
 
       <fieldset class="group">
         <legend>Declutter</legend>
+        <div class="switch-field master">
+          <wa-switch id="minimalAll" title="Toggle all the options below at once. Individual switches still override.">Minimal (all)</wa-switch>
+        </div>
         <div class="switch-field">
           <wa-switch id="hideEmpty">Hide empty cells</wa-switch>
         </div>
@@ -420,11 +459,12 @@
       </fieldset>
     </div>
 
-    <div class="toolbar no-print">
+    <div class="toolbar actions no-print">
       <button type="button" id="renderBtn">Update diagrams</button>
       <div class="switch-field">
         <wa-switch id="liveUpdate" checked>Live update</wa-switch>
       </div>
+      <button type="button" id="cleanA4Btn" title="One-click clean layout for A4 printing: compact diagrams, declutter on, tighter spacing.">Clean A4</button>
       <span class="divider"></span>
       <label>
         Presets
@@ -510,7 +550,14 @@ E4`;
     const noteSizeEl = document.getElementById("noteSize");
     const titleGapEl = document.getElementById("titleGap");
     const noCardBorderEl = document.getElementById("noCardBorder");
+    const minimalAllEl = document.getElementById("minimalAll");
+    const cleanA4Btn = document.getElementById("cleanA4Btn");
     const defaultFingeringEl = document.getElementById("defaultFingering");
+
+    // Switches controlled by the master "Minimal" toggle.
+    const DECLUTTER_SWITCHES = [
+      hideEmptyEl, hideCaptionEl, hideNoteInfoEl, noCardBorderEl, tightRowsEl, noMarginsEl
+    ];
 
     // The 3 palm keys (Palm D/Eb/F) and 4 spatula keys (G#, low B/C#/Bb).
     const PALM_SPATULA_KEYS = ["C1", "C2", "C4", "G_sharp", "B_low", "C_sharp_low", "Bb_low"];
@@ -546,6 +593,13 @@ E4`;
       document.body.style.setProperty("--row-gap", px(rowGapEl, 16));
       document.body.style.setProperty("--note-size", px(noteSizeEl, 16));
       document.body.style.setProperty("--title-gap", px(titleGapEl, 8));
+      updateMinimalState();
+    }
+
+    // Keep the master "Minimal" switch in sync: on only when every declutter
+    // option is on. Uses setSwitch so it never fires a change event.
+    function updateMinimalState() {
+      setSwitch(minimalAllEl, DECLUTTER_SWITCHES.every(el => el.checked));
     }
 
     function parseScientific(note) {
@@ -1109,6 +1163,34 @@ E4`;
     });
 
     copyLinkBtn.addEventListener("click", copyShareLink);
+
+    // Master toggle: flip every declutter option to match it.
+    minimalAllEl.addEventListener("change", () => {
+      DECLUTTER_SWITCHES.forEach(el => setSwitch(el, minimalAllEl.checked));
+      renderRows();
+      syncUrl();
+    });
+
+    // One-click layout tuned for clean A4 printing.
+    function applyCleanA4() {
+      setSwitch(hideAltSelectEl, true);
+      setSwitch(hideCaptionEl, true);
+      setSwitch(hideNoteInfoEl, true);
+      setSwitch(hideEmptyEl, true);
+      setSwitch(noMarginsEl, true);
+      setSwitch(tightRowsEl, false);
+      setSwitch(noCardBorderEl, false);
+      perRowEl.value = "10";
+      sizeScaleEl.value = "0.6";
+      colGapEl.value = "6";
+      rowGapEl.value = "10";
+      noteSizeEl.value = "12";
+      titleGapEl.value = "4";
+      renderRows();
+      syncUrl();
+      flash("Applied Clean A4 layout — use your browser's Print.");
+    }
+    cleanA4Btn.addEventListener("click", applyCleanA4);
 
     window.addEventListener("hashchange", () => {
       const p = parseHash();
