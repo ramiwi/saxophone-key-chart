@@ -41,6 +41,7 @@
     body.hide-caption .caption { display: none; }
     body.hide-note-info .note small,
     body.hide-note-info .register-badge { display: none; }
+    body.no-card-border .card { border-width: 0; }
     h1 { margin: 0 0 8px; font-size: 1.35rem; font-weight: 700; }
     .sub { margin: 0 0 14px; color: var(--muted); font-size: .9rem; }
     .sub a { color: var(--ink); }
@@ -77,6 +78,7 @@
     }
     .toolbar select,
     .toolbar input[type="text"],
+    .toolbar input[type="number"],
     .toolbar button {
       padding: 8px 10px;
       border: 1px solid var(--line);
@@ -128,7 +130,7 @@
     .rows {
       display: flex;
       flex-direction: column;
-      gap: 16px;
+      gap: var(--row-gap, 16px);
       overflow-x: auto;
     }
     .tutorial-row {
@@ -144,7 +146,7 @@
     .row-label {
       font-size: .75rem;
       color: var(--muted);
-      margin-bottom: 8px;
+      margin-bottom: var(--title-gap, 8px);
       font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
     }
     .row-title { color: var(--ink); font-weight: 600; }
@@ -154,6 +156,7 @@
       display: grid;
       align-items: start;
       column-gap: var(--col-gap);
+      row-gap: 10px;
       grid-template-columns: repeat(var(--col-count, 1), var(--card-w));
     }
     .card {
@@ -165,7 +168,7 @@
     }
     .card.missing { border-style: dashed; opacity: 0.9; }
     .note { margin-bottom: 4px; }
-    .note strong { font-size: 1rem; display: block; }
+    .note strong { font-size: var(--note-size, 1rem); display: block; }
     .note small { color: var(--muted); font-size: .75rem; }
     .register-badge {
       display: inline-block;
@@ -183,13 +186,12 @@
       display: flex;
       justify-content: center;
       align-items: center;
-      min-height: 180px;
-      padding: 8px 4px;
+      padding: 2px 0;
       overflow: hidden;
     }
     .diagram-wrap svg {
       width: 100%;
-      max-width: 140px;
+      max-width: var(--diagram-max, 140px);
       height: auto;
       display: block;
     }
@@ -233,7 +235,9 @@
         padding: 6px;
         border-color: #999;
       }
-      .row-track { grid-template-columns: repeat(var(--col-count, 1), minmax(0, 1fr)); }
+      /* Keep the chosen card size (so the gap stays pure spacing); only shrink
+         columns if the row would otherwise be wider than the page. */
+      .row-track { grid-template-columns: repeat(var(--col-count, 1), minmax(0, var(--card-w))); justify-content: start; }
       .card { padding: 4px; }
       .diagram-wrap { min-height: 0; padding: 4px 2px; }
       .diagram-wrap svg { max-width: 100%; }
@@ -264,6 +268,8 @@
           add or remove leading spaces to line things up. Commas are treated like spaces. Empty lines are skipped.
           A line starting with <code>;</code> is a title for the next row (e.g. <code>; Song 1</code>),
           shown next to its row number.
+          With <strong>Diagrams per row</strong> set, each row uses that fixed number of equal-size
+          columns and wraps any overflow onto new lines; clear it to align notes by character position instead.
         </p>
       </div>
     </div>
@@ -300,6 +306,9 @@
       <div class="switch-field">
         <wa-switch id="hideNoteInfo">Hide note details</wa-switch>
       </div>
+      <div class="switch-field">
+        <wa-switch id="noCardBorder">No diagram border</wa-switch>
+      </div>
       <label>
         Default fingering
         <input type="text" id="defaultFingering" list="fingeringPrefs"
@@ -312,8 +321,31 @@
         </datalist>
       </label>
       <label>
+        Diagrams per row
+        <input type="number" id="perRow" min="1" max="40" step="1" value="10" />
+      </label>
+      <label>
+        Column gap (px)
+        <input type="number" id="colGap" min="0" max="40" step="1" value="8" />
+      </label>
+      <label>
+        Row gap (px)
+        <input type="number" id="rowGap" min="0" max="80" step="1" value="16" />
+      </label>
+      <label>
+        Note size (px)
+        <input type="number" id="noteSize" min="6" max="48" step="1" value="16" />
+      </label>
+      <label>
+        Title spacing (px)
+        <input type="number" id="titleGap" min="0" max="40" step="1" value="8" />
+      </label>
+      <label>
         Diagram size
         <select id="sizeScale">
+          <option value="0.4">40%</option>
+          <option value="0.5">50%</option>
+          <option value="0.6">60%</option>
           <option value="0.75">75%</option>
           <option value="1" selected>100%</option>
           <option value="1.25">125%</option>
@@ -401,6 +433,12 @@ E4`;
     const tightRowsEl = document.getElementById("tightRows");
     const hideCaptionEl = document.getElementById("hideCaption");
     const hideNoteInfoEl = document.getElementById("hideNoteInfo");
+    const perRowEl = document.getElementById("perRow");
+    const colGapEl = document.getElementById("colGap");
+    const rowGapEl = document.getElementById("rowGap");
+    const noteSizeEl = document.getElementById("noteSize");
+    const titleGapEl = document.getElementById("titleGap");
+    const noCardBorderEl = document.getElementById("noCardBorder");
     const defaultFingeringEl = document.getElementById("defaultFingering");
 
     // The 3 palm keys (Palm D/Eb/F) and 4 spatula keys (G#, low B/C#/Bb).
@@ -432,6 +470,11 @@ E4`;
       document.body.classList.toggle("tight-rows", tightRowsEl.checked);
       document.body.classList.toggle("hide-caption", hideCaptionEl.checked);
       document.body.classList.toggle("hide-note-info", hideNoteInfoEl.checked);
+      document.body.classList.toggle("no-card-border", noCardBorderEl.checked);
+      const px = (el, fallback) => `${Math.max(0, parseInt(el.value, 10) || fallback)}px`;
+      document.body.style.setProperty("--row-gap", px(rowGapEl, 16));
+      document.body.style.setProperty("--note-size", px(noteSizeEl, 16));
+      document.body.style.setProperty("--title-gap", px(titleGapEl, 8));
     }
 
     function parseScientific(note) {
@@ -681,20 +724,24 @@ E4`;
     // card width on window resize without re-tokenizing the input.
     let lastColCount = 0;
 
-    // Pick the largest card width that still lets every column fit the available
-    // width (so the chart never needs horizontal scrolling), capped by the
-    // user's chosen Diagram size. The row's own padding/border and the
-    // inter-column gaps are subtracted from the usable width.
+    // Card width is the chosen Diagram size; it only shrinks below that if the
+    // row would otherwise overflow (so there's never horizontal scrolling).
+    // When the chosen size leaves room, the columns keep their size and the
+    // column-gap becomes pure space between cards (blank space fills the right)
+    // instead of eating into the diagrams.
     function fitCardWidth() {
       if (!lastColCount) return;
       const ROW_CHROME = tightRowsEl.checked ? 0 : 22; // .tutorial-row padding (10*2) + border (1*2)
-      const COL_GAP = 8;       // matches --col-gap
+      const COL_GAP = Math.max(0, parseInt(colGapEl.value, 10) || 0);
+      rowsEl.style.setProperty("--col-gap", `${COL_GAP}px`);
       const sizeScale = Number(sizeScaleEl.value) || 1;
       const preferred = Math.round(150 * sizeScale);
       const available = rowsEl.clientWidth - ROW_CHROME - (lastColCount - 1) * COL_GAP;
       const fit = Math.floor(available / lastColCount);
       const cardW = Math.max(48, Math.min(preferred, fit));
       rowsEl.style.setProperty("--card-w", `${cardW}px`);
+      // Let the diagram grow up to the chosen size rather than the old 140px cap.
+      rowsEl.style.setProperty("--diagram-max", `${preferred}px`);
     }
 
     function renderRows() {
@@ -726,13 +773,20 @@ E4`;
       const columns = [...offsets].sort((a, b) => a - b);
       const colIndex = new Map(columns.map((offset, idx) => [offset, idx]));
 
+      // Fixed-per-row mode: every row uses exactly N equal columns, packs its
+      // diagrams left-to-right, wraps the overflow onto new lines within the
+      // row, and leaves blank space when it has fewer than N — so the diagram
+      // size is constant across every row and page.
+      const perRow = parseInt(perRowEl.value, 10);
+      const fixedPerRow = Number.isFinite(perRow) && perRow > 0 ? perRow : 0;
+
       // Compact mode drops the blank placeholder columns: each row just packs
       // its own diagrams left-to-right, so cards no longer line up across rows.
-      const hideEmpty = hideEmptyEl.checked;
+      const hideEmpty = fixedPerRow ? true : hideEmptyEl.checked;
       const maxNotesPerRow = parsedRows.reduce(
         (max, { tokens }) => Math.max(max, tokens.filter(t => t.type === "note").length), 0);
 
-      lastColCount = hideEmpty ? maxNotesPerRow : columns.length;
+      lastColCount = fixedPerRow || (hideEmpty ? maxNotesPerRow : columns.length);
       fitCardWidth();
 
       rowsEl.replaceChildren();
@@ -764,7 +818,10 @@ E4`;
         const track = document.createElement("div");
         track.className = "row-track";
         const noteCount = tokens.filter(t => t.type === "note").length;
-        track.style.setProperty("--col-count", String(hideEmpty ? noteCount : columns.length));
+        // Fixed mode always uses N columns (so overflow wraps to new lines);
+        // otherwise compact uses this row's own count, aligned uses the shared set.
+        track.style.setProperty("--col-count",
+          String(fixedPerRow || (hideEmpty ? noteCount : columns.length)));
 
         for (const token of tokens) {
           if (token.type === "note") {
@@ -888,7 +945,8 @@ E4`;
       nomar: noMarginsEl,
       tight: tightRowsEl,
       nocap: hideCaptionEl,
-      noinfo: hideNoteInfoEl
+      noinfo: hideNoteInfoEl,
+      nobord: noCardBorderEl
     };
 
     function setSwitch(el, on) {
@@ -903,6 +961,11 @@ E4`;
         p.set(key, el.checked ? "1" : "0");
       }
       p.set("size", sizeScaleEl.value);
+      p.set("per", perRowEl.value);
+      p.set("gap", colGapEl.value);
+      p.set("rgap", rowGapEl.value);
+      p.set("nsize", noteSizeEl.value);
+      p.set("tgap", titleGapEl.value);
       const def = defaultFingeringEl.value.trim();
       if (def) p.set("def", def);
       return "#" + p.toString();
@@ -917,6 +980,11 @@ E4`;
         if (p.has(key)) setSwitch(el, p.get(key) === "1");
       }
       if (p.has("size")) sizeScaleEl.value = p.get("size");
+      if (p.has("per")) perRowEl.value = p.get("per");
+      if (p.has("gap")) colGapEl.value = p.get("gap");
+      if (p.has("rgap")) rowGapEl.value = p.get("rgap");
+      if (p.has("nsize")) noteSizeEl.value = p.get("nsize");
+      if (p.has("tgap")) titleGapEl.value = p.get("tgap");
       if (p.has("def")) defaultFingeringEl.value = p.get("def");
     }
 
@@ -1002,11 +1070,14 @@ E4`;
       if (liveUpdateEl.checked) renderRows();
     });
     [preferFlatsEl, darkPressedEl, sizeScaleEl, hideEmptyEl, hideAltSelectEl,
-     hidePalmSpatulaEl, noMarginsEl, tightRowsEl, hideCaptionEl, hideNoteInfoEl].forEach(el => {
+     hidePalmSpatulaEl, noMarginsEl, tightRowsEl, hideCaptionEl, hideNoteInfoEl,
+     noCardBorderEl].forEach(el => {
       el.addEventListener("change", () => { renderRows(); syncUrl(); });
     });
     liveUpdateEl.addEventListener("change", syncUrl);
-    defaultFingeringEl.addEventListener("input", () => { renderRows(); syncUrl(); });
+    [defaultFingeringEl, perRowEl, colGapEl, rowGapEl, noteSizeEl, titleGapEl].forEach(el => {
+      el.addEventListener("input", () => { renderRows(); syncUrl(); });
+    });
 
     // Re-fit the cards to the viewport when it changes, without a full re-render.
     let resizeTimer = null;
