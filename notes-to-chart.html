@@ -99,6 +99,61 @@
       --thumb-size: 1rem;
       --wa-form-control-activated-color: var(--wa-color-gray-60);
     }
+    /* Grouped settings: responsive cards, compact inline fields. */
+    .settings {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+      gap: 12px;
+      margin-bottom: 14px;
+      align-items: start;
+    }
+    .group {
+      min-width: 0;
+      margin: 0;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 6px 12px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .group > legend {
+      padding: 0 6px;
+      font-size: .68rem;
+      font-weight: 700;
+      letter-spacing: .06em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+    .group .switch-field { min-height: 30px; }
+    .field {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin: 0;
+      font-size: .82rem;
+      color: var(--ink);
+    }
+    .field select,
+    .field input {
+      flex: 0 0 auto;
+      width: auto;
+      padding: 5px 8px;
+      border: 1px solid var(--line);
+      border-radius: 4px;
+      font: inherit;
+      color: var(--ink);
+      background: #fff;
+    }
+    .field input[type="number"] { width: 4.5rem; }
+    .field input[type="text"] { width: 8rem; }
+    .toolbar .divider {
+      width: 1px;
+      align-self: stretch;
+      background: var(--line);
+      margin: 2px 4px;
+    }
     .status {
       padding: 12px;
       border-radius: 4px;
@@ -274,87 +329,103 @@
       </div>
     </div>
 
-    <div class="toolbar no-print">
-      <button type="button" id="renderBtn">Update diagrams</button>
-      <div class="switch-field">
-        <wa-switch id="preferFlats" checked>Prefer flats</wa-switch>
-      </div>
-      <div class="switch-field">
-        <wa-switch id="darkPressed" checked>Dark pressed fill</wa-switch>
-      </div>
-      <div class="switch-field">
-        <wa-switch id="liveUpdate" checked>Live update</wa-switch>
-      </div>
-      <div class="switch-field">
-        <wa-switch id="hideEmpty">Hide empty cells</wa-switch>
-      </div>
-      <div class="switch-field">
-        <wa-switch id="hideAltSelect">Hide fingering selectors</wa-switch>
-      </div>
-      <div class="switch-field">
-        <wa-switch id="hidePalmSpatula">Hide palm &amp; spatula keys</wa-switch>
-      </div>
-      <div class="switch-field">
-        <wa-switch id="noMargins">No page margins</wa-switch>
-      </div>
-      <div class="switch-field">
-        <wa-switch id="tightRows">No row padding/border</wa-switch>
-      </div>
-      <div class="switch-field">
-        <wa-switch id="hideCaption">Hide key caption</wa-switch>
-      </div>
-      <div class="switch-field">
-        <wa-switch id="hideNoteInfo">Hide note details</wa-switch>
-      </div>
-      <div class="switch-field">
-        <wa-switch id="noCardBorder">No diagram border</wa-switch>
-      </div>
-      <label>
-        Default fingering
-        <input type="text" id="defaultFingering" list="fingeringPrefs"
-               placeholder="e.g. side" autocomplete="off" />
-        <datalist id="fingeringPrefs">
-          <option value="side"></option>
-          <option value="front"></option>
-          <option value="fork"></option>
-          <option value="bis"></option>
-        </datalist>
-      </label>
-      <label>
-        Diagrams per row
-        <input type="number" id="perRow" min="1" max="40" step="1" value="10" />
-      </label>
-      <label>
-        Column gap (px)
-        <input type="number" id="colGap" min="0" max="40" step="1" value="8" />
-      </label>
-      <label>
-        Row gap (px)
-        <input type="number" id="rowGap" min="0" max="80" step="1" value="16" />
-      </label>
-      <label>
-        Note size (px)
-        <input type="number" id="noteSize" min="6" max="48" step="1" value="16" />
-      </label>
-      <label>
-        Title spacing (px)
-        <input type="number" id="titleGap" min="0" max="40" step="1" value="8" />
-      </label>
-      <label>
-        Diagram size
-        <select id="sizeScale">
-          <option value="0.4">40%</option>
-          <option value="0.5">50%</option>
-          <option value="0.6">60%</option>
-          <option value="0.75">75%</option>
-          <option value="1" selected>100%</option>
-          <option value="1.25">125%</option>
-          <option value="1.5">150%</option>
-        </select>
-      </label>
+    <div class="settings no-print">
+      <fieldset class="group">
+        <legend>Notation</legend>
+        <div class="switch-field">
+          <wa-switch id="preferFlats" checked>Prefer flats</wa-switch>
+        </div>
+        <div class="switch-field">
+          <wa-switch id="darkPressed" checked>Dark pressed fill</wa-switch>
+        </div>
+        <label class="field">
+          Default fingering
+          <input type="text" id="defaultFingering" list="fingeringPrefs"
+                 placeholder="e.g. side" autocomplete="off" />
+          <datalist id="fingeringPrefs">
+            <option value="side"></option>
+            <option value="front"></option>
+            <option value="fork"></option>
+            <option value="bis"></option>
+          </datalist>
+        </label>
+        <div class="switch-field">
+          <wa-switch id="hideAltSelect">Hide fingering selectors</wa-switch>
+        </div>
+        <div class="switch-field">
+          <wa-switch id="hidePalmSpatula">Hide palm &amp; spatula keys</wa-switch>
+        </div>
+      </fieldset>
+
+      <fieldset class="group">
+        <legend>Layout</legend>
+        <label class="field">
+          Diagrams per row
+          <input type="number" id="perRow" min="1" max="40" step="1" value="10" />
+        </label>
+        <label class="field">
+          Diagram size
+          <select id="sizeScale">
+            <option value="0.4">40%</option>
+            <option value="0.5">50%</option>
+            <option value="0.6">60%</option>
+            <option value="0.75">75%</option>
+            <option value="1" selected>100%</option>
+            <option value="1.25">125%</option>
+            <option value="1.5">150%</option>
+          </select>
+        </label>
+        <label class="field">
+          Column gap (px)
+          <input type="number" id="colGap" min="0" max="40" step="1" value="8" />
+        </label>
+        <label class="field">
+          Row gap (px)
+          <input type="number" id="rowGap" min="0" max="80" step="1" value="16" />
+        </label>
+      </fieldset>
+
+      <fieldset class="group">
+        <legend>Text &amp; spacing</legend>
+        <label class="field">
+          Note size (px)
+          <input type="number" id="noteSize" min="6" max="48" step="1" value="16" />
+        </label>
+        <label class="field">
+          Title spacing (px)
+          <input type="number" id="titleGap" min="0" max="40" step="1" value="8" />
+        </label>
+      </fieldset>
+
+      <fieldset class="group">
+        <legend>Declutter</legend>
+        <div class="switch-field">
+          <wa-switch id="hideEmpty">Hide empty cells</wa-switch>
+        </div>
+        <div class="switch-field">
+          <wa-switch id="hideCaption">Hide key caption</wa-switch>
+        </div>
+        <div class="switch-field">
+          <wa-switch id="hideNoteInfo">Hide note details</wa-switch>
+        </div>
+        <div class="switch-field">
+          <wa-switch id="noCardBorder">No diagram border</wa-switch>
+        </div>
+        <div class="switch-field">
+          <wa-switch id="tightRows">No row padding/border</wa-switch>
+        </div>
+        <div class="switch-field">
+          <wa-switch id="noMargins">No page margins</wa-switch>
+        </div>
+      </fieldset>
     </div>
 
     <div class="toolbar no-print">
+      <button type="button" id="renderBtn">Update diagrams</button>
+      <div class="switch-field">
+        <wa-switch id="liveUpdate" checked>Live update</wa-switch>
+      </div>
+      <span class="divider"></span>
       <label>
         Presets
         <select id="presetSelect"></select>
