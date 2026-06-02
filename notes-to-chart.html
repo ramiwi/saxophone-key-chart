@@ -144,6 +144,7 @@
       margin-bottom: 8px;
       font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
     }
+    .row-title { color: var(--ink); font-weight: 600; }
     /* Shared fixed-width columns: a note placed in column N lines up vertically
        across every row, because all rows use identical track widths. */
     .row-track {
@@ -258,6 +259,8 @@
           Notes use scientific pitch: letter, optional <code>#</code> or <code>b</code>, octave (e.g. <code>A#4</code>).
           Notes that start at the same character position align into the same column down the page —
           add or remove leading spaces to line things up. Commas are treated like spaces. Empty lines are skipped.
+          A line starting with <code>;</code> is a title for the next row (e.g. <code>; Song 1</code>),
+          shown next to its row number.
         </p>
       </div>
     </div>
@@ -691,12 +694,17 @@ E4`;
 
       // First pass: tokenize every non-empty line and collect the set of note
       // start offsets. Each distinct offset becomes one shared grid column.
+      // A line starting with ";" is a comment that titles the next note row.
       const parsedRows = [];
       const offsets = new Set();
+      let pendingTitle = null;
       for (const line of inputEl.value.split(/\r?\n/)) {
         if (!line.trim()) continue;
+        const titleMatch = line.match(/^\s*;\s?(.*)$/);
+        if (titleMatch) { pendingTitle = titleMatch[1].trim(); continue; }
         const tokens = tokenizeLine(line);
-        parsedRows.push(tokens);
+        parsedRows.push({ tokens, title: pendingTitle });
+        pendingTitle = null;
         for (const token of tokens) {
           if (token.type === "note") offsets.add(token.offset);
         }
@@ -709,7 +717,7 @@ E4`;
       // its own diagrams left-to-right, so cards no longer line up across rows.
       const hideEmpty = hideEmptyEl.checked;
       const maxNotesPerRow = parsedRows.reduce(
-        (max, tokens) => Math.max(max, tokens.filter(t => t.type === "note").length), 0);
+        (max, { tokens }) => Math.max(max, tokens.filter(t => t.type === "note").length), 0);
 
       lastColCount = hideEmpty ? maxNotesPerRow : columns.length;
       fitCardWidth();
@@ -724,7 +732,7 @@ E4`;
         return;
       }
 
-      parsedRows.forEach((tokens, idx) => {
+      parsedRows.forEach(({ tokens, title }, idx) => {
         const rowNum = idx + 1;
         const row = document.createElement("section");
         row.className = "tutorial-row";
@@ -732,6 +740,12 @@ E4`;
         const label = document.createElement("div");
         label.className = "row-label";
         label.textContent = `Row ${rowNum}`;
+        if (title) {
+          const titleEl = document.createElement("span");
+          titleEl.className = "row-title";
+          titleEl.textContent = title;
+          label.append(" — ", titleEl);
+        }
         row.appendChild(label);
 
         const track = document.createElement("div");
