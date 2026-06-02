@@ -38,6 +38,9 @@
     }
     body.no-margins .wrap { max-width: none; margin: 0; padding: 0; }
     body.tight-rows .tutorial-row { padding: 0; border-width: 0; }
+    body.hide-caption .caption { display: none; }
+    body.hide-note-info .note small,
+    body.hide-note-info .register-badge { display: none; }
     h1 { margin: 0 0 8px; font-size: 1.35rem; font-weight: 700; }
     .sub { margin: 0 0 14px; color: var(--muted); font-size: .9rem; }
     .sub a { color: var(--ink); }
@@ -291,6 +294,12 @@
       <div class="switch-field">
         <wa-switch id="tightRows">No row padding/border</wa-switch>
       </div>
+      <div class="switch-field">
+        <wa-switch id="hideCaption">Hide key caption</wa-switch>
+      </div>
+      <div class="switch-field">
+        <wa-switch id="hideNoteInfo">Hide note details</wa-switch>
+      </div>
       <label>
         Default fingering
         <input type="text" id="defaultFingering" list="fingeringPrefs"
@@ -390,6 +399,8 @@ E4`;
     const hidePalmSpatulaEl = document.getElementById("hidePalmSpatula");
     const noMarginsEl = document.getElementById("noMargins");
     const tightRowsEl = document.getElementById("tightRows");
+    const hideCaptionEl = document.getElementById("hideCaption");
+    const hideNoteInfoEl = document.getElementById("hideNoteInfo");
     const defaultFingeringEl = document.getElementById("defaultFingering");
 
     // The 3 palm keys (Palm D/Eb/F) and 4 spatula keys (G#, low B/C#/Bb).
@@ -419,6 +430,8 @@ E4`;
     function applyLayoutToggles() {
       document.body.classList.toggle("no-margins", noMarginsEl.checked);
       document.body.classList.toggle("tight-rows", tightRowsEl.checked);
+      document.body.classList.toggle("hide-caption", hideCaptionEl.checked);
+      document.body.classList.toggle("hide-note-info", hideNoteInfoEl.checked);
     }
 
     function parseScientific(note) {
@@ -873,7 +886,9 @@ E4`;
       noalt: hideAltSelectEl,
       nopalm: hidePalmSpatulaEl,
       nomar: noMarginsEl,
-      tight: tightRowsEl
+      tight: tightRowsEl,
+      nocap: hideCaptionEl,
+      noinfo: hideNoteInfoEl
     };
 
     function setSwitch(el, on) {
@@ -987,7 +1002,7 @@ E4`;
       if (liveUpdateEl.checked) renderRows();
     });
     [preferFlatsEl, darkPressedEl, sizeScaleEl, hideEmptyEl, hideAltSelectEl,
-     hidePalmSpatulaEl, noMarginsEl, tightRowsEl].forEach(el => {
+     hidePalmSpatulaEl, noMarginsEl, tightRowsEl, hideCaptionEl, hideNoteInfoEl].forEach(el => {
       el.addEventListener("change", () => { renderRows(); syncUrl(); });
     });
     liveUpdateEl.addEventListener("change", syncUrl);
