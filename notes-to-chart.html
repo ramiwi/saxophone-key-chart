@@ -7,6 +7,9 @@
   <link rel="stylesheet" href="https://ka-f.webawesome.com/webawesome@3.7.0/styles/webawesome.css" />
   <script type="module" src="https://ka-f.webawesome.com/webawesome@3.7.0/webawesome.loader.js"></script>
   <script src="nav.js" defer></script>
+  <!-- Music-notation rendering for the optional per-row staff. UMD build
+       exposes window.Vex (Vex.Flow). Deferred so it runs before our render. -->
+  <script src="https://cdn.jsdelivr.net/npm/vexflow@4.2.2/build/cjs/vexflow.js" defer></script>
   <style>
     :root {
       --bg: #ffffff;
@@ -271,6 +274,8 @@
       padding: 2px 0;
       overflow: hidden;
     }
+    .staff-wrap { margin-top: 8px; overflow: hidden; }
+    .staff-wrap svg { display: block; max-width: 100%; height: auto; }
     .diagram-wrap svg {
       width: 100%;
       max-width: var(--diagram-max, 140px);
@@ -305,7 +310,7 @@
       /* The page margin is applied as content padding (--page-margin) so it is
          visible both on screen and in print; keep the @page margin at 0 to avoid
          doubling it. */
-      @page { size: A4 landscape; margin: 0; }
+      @page { size: A4 portrait; margin: 0; }
       .no-print { display: none !important; }
       .panel, .sub, .legend, #status { display: none !important; }
       html, body { background: #fff; }
@@ -386,6 +391,9 @@
         </div>
         <div class="switch-field">
           <wa-switch id="hidePalmSpatula">Hide palm &amp; spatula keys</wa-switch>
+        </div>
+        <div class="switch-field">
+          <wa-switch id="showStaff" title="Draw a treble-clef staff with this row's notes beneath its diagrams.">Show note staff</wa-switch>
         </div>
       </fieldset>
 
@@ -558,6 +566,7 @@ E4`;
     const cleanA4Btn = document.getElementById("cleanA4Btn");
     const pageMarginEl = document.getElementById("pageMargin");
     const defaultFingeringEl = document.getElementById("defaultFingering");
+    const showStaffEl = document.getElementById("showStaff");
 
     // Switches controlled by the master "Minimal" toggle.
     const DECLUTTER_SWITCHES = [
@@ -874,6 +883,87 @@ E4`;
       rowsEl.style.setProperty("--diagram-max", `${preferred}px`);
     }
 
+    // Draw a treble-clef staff with the row's notes beneath its diagrams, using
+    // VexFlow (loaded from CDN as window.Vex). Honors Prefer-flats via the same
+    // midi→scientific conversion as the diagram labels. No time signature: the
+    // rows aren't metered, so SOFT voice mode allows any number of notes.
+    //
+    // `items` is [{ text, col }] — col is the diagram's grid column, so each
+    // notehead is shifted to sit directly under its card. The staff is sized to
+    // the cards' actual extent (read from the laid-out track) rather than the
+    // full-width block, so it doesn't stretch past the diagrams.
+    function renderStaff(container, items, preferFlats, track) {
+      const VF = window.Vex && window.Vex.Flow;
+      if (!VF || !items.length) return;
+
+      // Use the track's resolved grid so the staff matches the real card widths.
+      const cs = getComputedStyle(track);
+      const cols = cs.gridTemplateColumns.split(/\s+/).map(parseFloat).filter(n => !isNaN(n));
+      if (!cols.length) return;
+      const gap = parseFloat(cs.columnGap) || 0;
+      const centers = [];
+      let x = 0;
+      for (const w of cols) { centers.push(x + w / 2); x += w + gap; }
+      const contentWidth = x - gap;
+      const lastCenter = centers[centers.length - 1];
+
+      const staveNotes = [];
+      const targets = [];
+      for (const item of items) {
+        const midi = scientificToMidi(item.text);
+        if (midi === null) continue;
+        const m = midiToScientific(midi, preferFlats).match(/^([A-G])(#|b)?(-?\d+)$/);
+        if (!m) continue;
+        const [, letter, acc, octave] = m;
+        const note = new VF.StaveNote({
+          clef: "treble",
+          keys: [`${letter.toLowerCase()}${acc || ""}/${octave}`],
+          duration: "q"
+        });
+        if (acc) note.addModifier(new VF.Accidental(acc), 0);
+        staveNotes.push(note);
+        targets.push(centers[item.col] != null ? centers[item.col] : lastCenter);
+      }
+      if (!staveNotes.length) return;
+
+      // The clef occupies the left of the staff. Rather than cram the notes into
+      // the remaining space (which offsets them from the cards), push the diagram
+      // cards right by the clef width so card #1 sits over note #1.
+      const CLEF_ALLOWANCE = 56;
+      const staveWidth = Math.max(160, Math.ceil(contentWidth) + CLEF_ALLOWANCE);
+      const renderer = new VF.Renderer(container, VF.Renderer.Backends.SVG);
+      renderer.resize(staveWidth, 120);
+      const ctx = renderer.getContext();
+
+      const stave = new VF.Stave(0, 0, staveWidth - 1);
+      stave.addClef("treble");
+      stave.setContext(ctx).draw();
+
+      // Indent the cards by the actual clef width so both grids share an origin.
+      const clefOffset = stave.getNoteStartX();
+      track.style.paddingLeft = `${clefOffset}px`;
+
+      const voice = new VF.Voice({ num_beats: staveNotes.length, beat_value: 4 })
+        .setMode(VF.Voice.Mode.SOFT);
+      voice.addTickables(staveNotes);
+      voice.setStave(stave);
+      // Attach the stave to each note NOW so getNoteHeadBeginX/EndX include the
+      // clef/stave offset. (voice.draw would otherwise set it only at draw time,
+      // making the measurement — and thus the shift — wrong by the clef width.)
+      staveNotes.forEach(note => note.setStave(stave));
+      new VF.Formatter().joinVoices([voice])
+        .format([voice], Math.max(60, staveWidth - clefOffset - 10));
+
+      // A card's center is now clefOffset + its center within the grid; shift each
+      // notehead there (measured, so accidentals don't throw off alignment).
+      staveNotes.forEach((note, i) => {
+        const tc = note.getTickContext();
+        const cur = (note.getNoteHeadBeginX() + note.getNoteHeadEndX()) / 2;
+        tc.setX(tc.getX() + (clefOffset + targets[i] - cur));
+      });
+      voice.draw(ctx, stave);
+    }
+
     function renderRows() {
       if (!schema || !svgTemplate) return;
 
@@ -953,11 +1043,19 @@ E4`;
         track.style.setProperty("--col-count",
           String(fixedPerRow || (hideEmpty ? noteCount : columns.length)));
 
+        // Track each note's grid column so the staff can sit a notehead under
+        // each card: aligned mode uses the shared column; compact/fixed packs
+        // sequentially.
+        const staffItems = [];
+        let seqCol = 0;
         for (const token of tokens) {
           if (token.type === "note") {
             const card = renderNoteCard(token.text, preferFlats);
-            if (!hideEmpty) card.style.gridColumn = String(colIndex.get(token.offset) + 1);
+            const col = hideEmpty ? seqCol : colIndex.get(token.offset);
+            if (!hideEmpty) card.style.gridColumn = String(col + 1);
             track.appendChild(card);
+            staffItems.push({ text: token.text, col });
+            seqCol++;
           } else {
             warnings.push(`Row ${rowNum}: skipped "${token.text}"`);
           }
@@ -965,6 +1063,15 @@ E4`;
 
         row.appendChild(track);
         rowsEl.appendChild(row);
+
+        // Staff goes last so it sits beneath the diagrams; the track is now laid
+        // out, so renderStaff can read its real column geometry to align notes.
+        if (showStaffEl.checked) {
+          const staffWrap = document.createElement("div");
+          staffWrap.className = "staff-wrap";
+          row.appendChild(staffWrap);
+          renderStaff(staffWrap, staffItems, preferFlats, track);
+        }
       });
 
       if (warnings.length) {
@@ -1075,7 +1182,8 @@ E4`;
       tight: tightRowsEl,
       nocap: hideCaptionEl,
       noinfo: hideNoteInfoEl,
-      nobord: noCardBorderEl
+      nobord: noCardBorderEl,
+      staff: showStaffEl
     };
 
     function setSwitch(el, on) {
@@ -1230,7 +1338,7 @@ E4`;
     });
     [preferFlatsEl, darkPressedEl, sizeScaleEl, hideEmptyEl, hideAltSelectEl,
      hidePalmSpatulaEl, tightRowsEl, hideCaptionEl, hideNoteInfoEl,
-     noCardBorderEl].forEach(el => {
+     noCardBorderEl, showStaffEl].forEach(el => {
       el.addEventListener("change", () => { renderRows(); syncUrl(); });
     });
     liveUpdateEl.addEventListener("change", syncUrl);
@@ -1246,6 +1354,13 @@ E4`;
     });
 
     loadAssets();
+
+    // With embedded assets the first render runs synchronously during parse,
+    // before the deferred VexFlow script executes. If the staff is enabled from
+    // the URL, re-render once VexFlow is ready so it appears on first load.
+    if (showStaffEl.checked) {
+      window.addEventListener("load", () => { if (window.Vex) renderRows(); }, { once: true });
+    }
   </script>
 </body>
 </html>
