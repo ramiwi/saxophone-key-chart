@@ -34,9 +34,8 @@
     .wrap {
       max-width: 1400px;
       margin: 20px auto;
-      padding: 16px;
+      padding: var(--page-margin, 16px);
     }
-    body.no-margins .wrap { max-width: none; margin: 0; padding: 0; }
     body.tight-rows .tutorial-row { padding: 0; border-width: 0; }
     body.hide-caption .caption { display: none; }
     body.hide-note-info .note small,
@@ -303,11 +302,14 @@
     .warn { color: var(--muted); font-size: .8rem; margin-top: 6px; }
     .hint { font-size: .8rem; color: var(--muted); }
     @media print {
-      @page { size: A4 landscape; margin: 8mm; }
+      /* The page margin is applied as content padding (--page-margin) so it is
+         visible both on screen and in print; keep the @page margin at 0 to avoid
+         doubling it. */
+      @page { size: A4 landscape; margin: 0; }
       .no-print { display: none !important; }
       .panel, .sub, .legend, #status { display: none !important; }
       html, body { background: #fff; }
-      .wrap { max-width: none; margin: 0; padding: 0; }
+      .wrap { max-width: none; margin: 0; padding: var(--page-margin, 16px); }
       h1 { font-size: 1.1rem; margin-bottom: 6px; }
       .rows { gap: 8px; overflow: visible; }
       /* Drop the fixed pixel column width so wide rows shrink to fit the page;
@@ -419,6 +421,12 @@
           Row gap (px)
           <input type="number" id="rowGap" min="0" max="80" step="1" value="16" />
         </label>
+        <label class="field">
+          <span class="field-label">Page margin (px)
+            <span class="help" title="Blank margin (px) around the whole chart, shown on screen and in print. Set to 0 for full-bleed.">?</span>
+          </span>
+          <input type="number" id="pageMargin" min="0" max="120" step="1" value="16" />
+        </label>
       </fieldset>
 
       <fieldset class="group">
@@ -452,9 +460,6 @@
         </div>
         <div class="switch-field">
           <wa-switch id="tightRows">No row padding/border</wa-switch>
-        </div>
-        <div class="switch-field">
-          <wa-switch id="noMargins">No page margins</wa-switch>
         </div>
       </fieldset>
     </div>
@@ -540,7 +545,6 @@ E4`;
     const hideEmptyEl = document.getElementById("hideEmpty");
     const hideAltSelectEl = document.getElementById("hideAltSelect");
     const hidePalmSpatulaEl = document.getElementById("hidePalmSpatula");
-    const noMarginsEl = document.getElementById("noMargins");
     const tightRowsEl = document.getElementById("tightRows");
     const hideCaptionEl = document.getElementById("hideCaption");
     const hideNoteInfoEl = document.getElementById("hideNoteInfo");
@@ -552,11 +556,12 @@ E4`;
     const noCardBorderEl = document.getElementById("noCardBorder");
     const minimalAllEl = document.getElementById("minimalAll");
     const cleanA4Btn = document.getElementById("cleanA4Btn");
+    const pageMarginEl = document.getElementById("pageMargin");
     const defaultFingeringEl = document.getElementById("defaultFingering");
 
     // Switches controlled by the master "Minimal" toggle.
     const DECLUTTER_SWITCHES = [
-      hideEmptyEl, hideCaptionEl, hideNoteInfoEl, noCardBorderEl, tightRowsEl, noMarginsEl
+      hideEmptyEl, hideCaptionEl, hideNoteInfoEl, noCardBorderEl, tightRowsEl
     ];
 
     // The 3 palm keys (Palm D/Eb/F) and 4 spatula keys (G#, low B/C#/Bb).
@@ -584,7 +589,6 @@ E4`;
     }
 
     function applyLayoutToggles() {
-      document.body.classList.toggle("no-margins", noMarginsEl.checked);
       document.body.classList.toggle("tight-rows", tightRowsEl.checked);
       document.body.classList.toggle("hide-caption", hideCaptionEl.checked);
       document.body.classList.toggle("hide-note-info", hideNoteInfoEl.checked);
@@ -593,6 +597,7 @@ E4`;
       document.body.style.setProperty("--row-gap", px(rowGapEl, 16));
       document.body.style.setProperty("--note-size", px(noteSizeEl, 16));
       document.body.style.setProperty("--title-gap", px(titleGapEl, 8));
+      document.body.style.setProperty("--page-margin", px(pageMarginEl, 16));
       updateMinimalState();
     }
 
@@ -1067,7 +1072,6 @@ E4`;
       empty: hideEmptyEl,
       noalt: hideAltSelectEl,
       nopalm: hidePalmSpatulaEl,
-      nomar: noMarginsEl,
       tight: tightRowsEl,
       nocap: hideCaptionEl,
       noinfo: hideNoteInfoEl,
@@ -1091,6 +1095,7 @@ E4`;
       p.set("rgap", rowGapEl.value);
       p.set("nsize", noteSizeEl.value);
       p.set("tgap", titleGapEl.value);
+      p.set("pmar", pageMarginEl.value);
       const def = defaultFingeringEl.value.trim();
       if (def) p.set("def", def);
       return "#" + p.toString();
@@ -1110,6 +1115,7 @@ E4`;
       if (p.has("rgap")) rowGapEl.value = p.get("rgap");
       if (p.has("nsize")) noteSizeEl.value = p.get("nsize");
       if (p.has("tgap")) titleGapEl.value = p.get("tgap");
+      if (p.has("pmar")) pageMarginEl.value = p.get("pmar");
       if (p.has("def")) defaultFingeringEl.value = p.get("def");
     }
 
@@ -1177,7 +1183,6 @@ E4`;
       setSwitch(hideCaptionEl, true);
       setSwitch(hideNoteInfoEl, true);
       setSwitch(hideEmptyEl, true);
-      setSwitch(noMarginsEl, true);
       setSwitch(tightRowsEl, false);
       setSwitch(noCardBorderEl, false);
       perRowEl.value = "10";
@@ -1186,6 +1191,7 @@ E4`;
       rowGapEl.value = "10";
       noteSizeEl.value = "12";
       titleGapEl.value = "4";
+      pageMarginEl.value = "8";
       renderRows();
       syncUrl();
       flash("Applied Clean A4 layout — use your browser's Print.");
@@ -1223,12 +1229,12 @@ E4`;
       if (liveUpdateEl.checked) renderRows();
     });
     [preferFlatsEl, darkPressedEl, sizeScaleEl, hideEmptyEl, hideAltSelectEl,
-     hidePalmSpatulaEl, noMarginsEl, tightRowsEl, hideCaptionEl, hideNoteInfoEl,
+     hidePalmSpatulaEl, tightRowsEl, hideCaptionEl, hideNoteInfoEl,
      noCardBorderEl].forEach(el => {
       el.addEventListener("change", () => { renderRows(); syncUrl(); });
     });
     liveUpdateEl.addEventListener("change", syncUrl);
-    [defaultFingeringEl, perRowEl, colGapEl, rowGapEl, noteSizeEl, titleGapEl].forEach(el => {
+    [defaultFingeringEl, perRowEl, colGapEl, rowGapEl, noteSizeEl, titleGapEl, pageMarginEl].forEach(el => {
       el.addEventListener("input", () => { renderRows(); syncUrl(); });
     });
 
