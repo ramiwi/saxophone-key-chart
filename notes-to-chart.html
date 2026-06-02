@@ -921,6 +921,11 @@ E4`;
           duration: "q"
         });
         if (acc) note.addModifier(new VF.Accidental(acc), 0);
+        // Label each note with its pitch name (letter + accidental) below it.
+        const annotation = new VF.Annotation(`${letter}${acc || ""}`)
+          .setVerticalJustification(VF.Annotation.VerticalJustify.BOTTOM)
+          .setFont("system-ui, sans-serif", 11, "bold");
+        note.addModifier(annotation, 0);
         staveNotes.push(note);
         targets.push(centers[item.col] != null ? centers[item.col] : lastCenter);
       }
