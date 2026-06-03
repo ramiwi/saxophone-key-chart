@@ -306,6 +306,46 @@
     }
     .warn { color: var(--muted); font-size: .8rem; margin-top: 6px; }
     .hint { font-size: .8rem; color: var(--muted); }
+    .app-footer {
+      margin-top: 24px;
+      padding-top: 12px;
+      border-top: 1px solid var(--line);
+      color: var(--muted);
+      font-size: .75rem;
+      text-align: center;
+    }
+    /* While a (synchronous, possibly multi-second) render is running, dim the
+       rows and show a small spinner so the UI feels responsive instead of
+       frozen. The dimming is what the user sees the instant a toggle flips. */
+    .rows.busy { opacity: .45; pointer-events: none; transition: opacity .12s; }
+    #busy {
+      position: fixed;
+      right: 16px;
+      bottom: 16px;
+      z-index: 50;
+      display: none;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 14px;
+      border-radius: 999px;
+      background: var(--ink);
+      color: #fff;
+      font-size: .8rem;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, .25);
+    }
+    #busy.show { display: inline-flex; }
+    #busy .spinner {
+      width: 14px;
+      height: 14px;
+      border: 2px solid rgba(255, 255, 255, .35);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: busy-spin .6s linear infinite;
+    }
+    @keyframes busy-spin { to { transform: rotate(360deg); } }
+    @media (prefers-reduced-motion: reduce) {
+      #busy .spinner { animation: none; }
+    }
     @media print {
       /* The page margin is applied as content padding (--page-margin) so it is
          visible both on screen and in print; keep the @page margin at 0 to avoid
@@ -496,11 +536,20 @@
     </div>
 
     <div id="rows" class="rows"></div>
+
+    <footer class="app-footer no-print">Notes → key charts · <span id="appVersion"></span></footer>
+  </div>
+
+  <div id="busy" class="no-print" role="status" aria-live="polite">
+    <span class="spinner" aria-hidden="true"></span>
+    <span>Rendering…</span>
   </div>
 
   <script src="schema.js"></script>
   <script src="diagram.js"></script>
   <script>
+    const APP_VERSION = "1.0.0";
+
     const SCHEMA_URL = "saxophone key-schema-v3.json";
     const SVG_URL = "sax-key-diagram-v2os.svg";
 
@@ -969,6 +1018,30 @@ E4`;
       voice.draw(ctx, stave);
     }
 
+    // renderRows() is synchronous and can take 1–2s with many rows (SVG cloning,
+    // forced reflows, VexFlow staves), which froze the UI on every toggle. Route
+    // setting changes through this scheduler instead: it shows a busy indicator,
+    // then waits for two animation frames so the toggle and the indicator paint
+    // before the blocking work starts. Rapid changes (e.g. typing, the master
+    // toggle flipping many switches) coalesce into a single render.
+    const busyEl = document.getElementById("busy");
+    let renderPending = false;
+    function scheduleRender() {
+      busyEl.classList.add("show");
+      rowsEl.classList.add("busy");
+      if (renderPending) return;
+      renderPending = true;
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        renderPending = false;
+        try {
+          renderRows();
+        } finally {
+          busyEl.classList.remove("show");
+          rowsEl.classList.remove("busy");
+        }
+      }));
+    }
+
     function renderRows() {
       if (!schema || !svgTemplate) return;
 
@@ -1254,7 +1327,7 @@ E4`;
       if (presets[name] === undefined) return;
       inputEl.value = presets[name];
       saveDraft(inputEl.value);
-      renderRows();
+      scheduleRender();
       syncUrl();
       flash(`Loaded “${name}”.`);
     });
@@ -1286,7 +1359,7 @@ E4`;
     // Master toggle: flip every declutter option to match it.
     minimalAllEl.addEventListener("change", () => {
       DECLUTTER_SWITCHES.forEach(el => setSwitch(el, minimalAllEl.checked));
-      renderRows();
+      scheduleRender();
       syncUrl();
     });
 
@@ -1305,7 +1378,7 @@ E4`;
       noteSizeEl.value = "12";
       titleGapEl.value = "4";
       pageMarginEl.value = "8";
-      renderRows();
+      scheduleRender();
       syncUrl();
       flash("Applied Clean A4 layout — use your browser's Print.");
     }
@@ -1319,7 +1392,7 @@ E4`;
         inputEl.value = shared;
         saveDraft(shared);
       }
-      renderRows();
+      scheduleRender();
       flash("Loaded from link.");
     });
 
@@ -1335,20 +1408,20 @@ E4`;
     refreshPresetSelect("");
     syncUrl();
 
-    renderBtn.addEventListener("click", renderRows);
+    renderBtn.addEventListener("click", scheduleRender);
     inputEl.addEventListener("input", () => {
       saveDraft(inputEl.value);
       syncUrl();
-      if (liveUpdateEl.checked) renderRows();
+      if (liveUpdateEl.checked) scheduleRender();
     });
     [preferFlatsEl, darkPressedEl, sizeScaleEl, hideEmptyEl, hideAltSelectEl,
      hidePalmSpatulaEl, tightRowsEl, hideCaptionEl, hideNoteInfoEl,
      noCardBorderEl, showStaffEl].forEach(el => {
-      el.addEventListener("change", () => { renderRows(); syncUrl(); });
+      el.addEventListener("change", () => { scheduleRender(); syncUrl(); });
     });
     liveUpdateEl.addEventListener("change", syncUrl);
     [defaultFingeringEl, perRowEl, colGapEl, rowGapEl, noteSizeEl, titleGapEl, pageMarginEl].forEach(el => {
-      el.addEventListener("input", () => { renderRows(); syncUrl(); });
+      el.addEventListener("input", () => { scheduleRender(); syncUrl(); });
     });
 
     // Re-fit the cards to the viewport when it changes, without a full re-render.
@@ -1357,6 +1430,8 @@ E4`;
       clearTimeout(resizeTimer);
       resizeTimer = setTimeout(fitCardWidth, 120);
     });
+
+    document.getElementById("appVersion").textContent = `v${APP_VERSION}`;
 
     loadAssets();
 
