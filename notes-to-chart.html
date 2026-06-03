@@ -6,6 +6,7 @@
   <title>Notes → key charts</title>
   <link rel="stylesheet" href="https://ka-f.webawesome.com/webawesome@3.7.0/styles/webawesome.css" />
   <script type="module" src="https://ka-f.webawesome.com/webawesome@3.7.0/webawesome.loader.js"></script>
+  <script src="version.js"></script>
   <script src="nav.js" defer></script>
   <!-- Music-notation rendering for the optional per-row staff. UMD build
        exposes window.Vex (Vex.Flow). Deferred so it runs before our render. -->
@@ -548,8 +549,6 @@
   <script src="schema.js"></script>
   <script src="diagram.js"></script>
   <script>
-    const APP_VERSION = "1.0.1";
-
     const SCHEMA_URL = "saxophone key-schema-v3.json";
     const SVG_URL = "sax-key-diagram-v2os.svg";
 
@@ -1439,7 +1438,7 @@ E4`;
       resizeTimer = setTimeout(fitCardWidth, 120);
     });
 
-    document.getElementById("appVersion").textContent = `v${APP_VERSION}`;
+    document.getElementById("appVersion").textContent = `v${window.APP_VERSION}`;
 
     loadAssets();
 

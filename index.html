@@ -6,6 +6,7 @@
   <title>Saxophone Key Chart</title>
   <link rel="stylesheet" href="https://ka-f.webawesome.com/webawesome@3.7.0/styles/webawesome.css" />
   <script type="module" src="https://ka-f.webawesome.com/webawesome@3.7.0/webawesome.loader.js"></script>
+  <script src="version.js"></script>
   <script src="nav.js" defer></script>
   <style>
     :root {
@@ -462,7 +463,7 @@
     }
 
     function pcIndex(note) {
-      return PC_INDEX[note.replace(/b/g, match => "#TEMP").replace("TEMP", "#")];
+      return PC_INDEX[note];
     }
 
     function pitchNameFromPc(pc, preferFlats) {
