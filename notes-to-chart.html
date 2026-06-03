@@ -1026,6 +1026,13 @@ E4`;
     // toggle flipping many switches) coalesce into a single render.
     const busyEl = document.getElementById("busy");
     let renderPending = false;
+    // Reactive setting/input changes go through here so they only re-render when
+    // Live update is on. With it off, the "Update diagrams" button (renderBtn) is
+    // the sole trigger. Explicit one-shot actions (Clean A4, preset/link loads)
+    // call scheduleRender directly and render regardless.
+    function autoRender() {
+      if (liveUpdateEl.checked) scheduleRender();
+    }
     function scheduleRender() {
       busyEl.classList.add("show");
       rowsEl.classList.add("busy");
@@ -1359,7 +1366,7 @@ E4`;
     // Master toggle: flip every declutter option to match it.
     minimalAllEl.addEventListener("change", () => {
       DECLUTTER_SWITCHES.forEach(el => setSwitch(el, minimalAllEl.checked));
-      scheduleRender();
+      autoRender();
       syncUrl();
     });
 
@@ -1412,16 +1419,17 @@ E4`;
     inputEl.addEventListener("input", () => {
       saveDraft(inputEl.value);
       syncUrl();
-      if (liveUpdateEl.checked) scheduleRender();
+      autoRender();
     });
     [preferFlatsEl, darkPressedEl, sizeScaleEl, hideEmptyEl, hideAltSelectEl,
      hidePalmSpatulaEl, tightRowsEl, hideCaptionEl, hideNoteInfoEl,
      noCardBorderEl, showStaffEl].forEach(el => {
-      el.addEventListener("change", () => { scheduleRender(); syncUrl(); });
+      el.addEventListener("change", () => { autoRender(); syncUrl(); });
     });
-    liveUpdateEl.addEventListener("change", syncUrl);
+    // Turning Live update back on should catch up to any changes made while off.
+    liveUpdateEl.addEventListener("change", () => { autoRender(); syncUrl(); });
     [defaultFingeringEl, perRowEl, colGapEl, rowGapEl, noteSizeEl, titleGapEl, pageMarginEl].forEach(el => {
-      el.addEventListener("input", () => { scheduleRender(); syncUrl(); });
+      el.addEventListener("input", () => { autoRender(); syncUrl(); });
     });
 
     // Re-fit the cards to the viewport when it changes, without a full re-render.
