@@ -17,6 +17,8 @@
   <script src="https://cdn.jsdelivr.net/npm/vexflow@4.2.2/build/cjs/vexflow.js" defer></script>
   <!-- ABC parser for tune lookup (The Session → scientific pitch rows). -->
   <script src="https://cdn.jsdelivr.net/npm/abcjs@6.4.4/dist/abcjs-basic-min.js" defer></script>
+  <!-- MIDI parser for local .mid/.midi import. -->
+  <script src="https://cdn.jsdelivr.net/npm/@tonejs/midi@2.0.28/build/Midi.min.js" defer></script>
   <style>
     :root {
       --bg: #ffffff;
@@ -98,7 +100,9 @@
       align-items: center;
       margin-bottom: 8px;
     }
-    .lookup-row input[type="search"] {
+    .lookup-row input[type="search"],
+    .lookup-row input[type="url"],
+    .lookup-row select {
       flex: 1 1 12rem;
       min-width: 0;
       padding: 8px 10px;
@@ -106,11 +110,17 @@
       border-radius: 4px;
       font: inherit;
     }
+    .lookup-row input[type="file"] {
+      flex: 1 1 14rem;
+      min-width: 0;
+      font: inherit;
+    }
     .lookup-row button {
       padding: 8px 12px;
       border: 1px solid var(--line);
       border-radius: 4px;
       font: inherit;
+      color: var(--ink);
       background: #fff;
       cursor: pointer;
     }
@@ -450,6 +460,14 @@
         <div class="tune-lookup">
           <label for="tuneSearch">Look up tune online</label>
           <div class="lookup-row">
+            <select id="tuneSource" aria-label="Tune source">
+              <option value="session">The Session (built-in)</option>
+              <option value="tunepal">Tunepal (built-in)</option>
+              <option value="adapter">Catalog adapter (backend)</option>
+            </select>
+            <input type="url" id="catalogAdapterUrl" placeholder="Adapter base URL (e.g. https://example.com/tunes-api)" hidden />
+          </div>
+          <div class="lookup-row">
             <input type="search" id="tuneSearch" placeholder="Search The Session (e.g. Morning Dew)" autocomplete="off" />
             <button type="button" id="tuneSearchBtn">Search</button>
           </div>
@@ -464,10 +482,17 @@
             <button type="button" id="tuneAppendBtn">Append</button>
           </div>
           <p class="lookup-hint">
-            Searches <a href="https://thesession.org/tunes" target="_blank" rel="noopener">thesession.org</a>
-            (Irish traditional tunes in ABC notation) and converts the first melody line to scientific pitch names.
-            Arbitrary “search the web” for pop songs is not available in the browser without a paid API or server proxy.
+            Searches <a href="https://thesession.org/tunes" target="_blank" rel="noopener">The Session</a> and
+            <a href="https://tunepal.org/" target="_blank" rel="noopener">Tunepal</a>
+            (traditional tune catalogs with ABC notation) and converts melody lines to scientific pitch names.
+            For larger catalogs, switch source to <strong>Catalog adapter</strong> and provide your backend URL.
+            That backend should expose <code>/search</code> and <code>/tunes/:id</code> JSON endpoints.
           </p>
+          <div class="lookup-row">
+            <input type="file" id="tuneFileInput" accept=".abc,.mid,.midi,.musicxml,.xml" />
+            <button type="button" id="tuneFileReplaceBtn">Import file (replace)</button>
+            <button type="button" id="tuneFileAppendBtn">Import file (append)</button>
+          </div>
         </div>
         <label for="input">Note lines (one row per line)</label>
         <textarea id="input" spellcheck="false" placeholder="B3   B4 B4           C5"></textarea>
@@ -713,11 +738,16 @@ E4`;
     const saveStatusEl = document.getElementById("saveStatus");
     const tuneSearchEl = document.getElementById("tuneSearch");
     const tuneSearchBtn = document.getElementById("tuneSearchBtn");
+    const tuneSourceEl = document.getElementById("tuneSource");
+    const catalogAdapterUrlEl = document.getElementById("catalogAdapterUrl");
     const tunePickEl = document.getElementById("tunePick");
     const tuneResultSelectEl = document.getElementById("tuneResultSelect");
     const tuneSettingSelectEl = document.getElementById("tuneSettingSelect");
     const tuneReplaceBtn = document.getElementById("tuneReplaceBtn");
     const tuneAppendBtn = document.getElementById("tuneAppendBtn");
+    const tuneFileInputEl = document.getElementById("tuneFileInput");
+    const tuneFileReplaceBtn = document.getElementById("tuneFileReplaceBtn");
+    const tuneFileAppendBtn = document.getElementById("tuneFileAppendBtn");
 
     function showStatus(message, isError = false) {
       statusEl.hidden = false;
@@ -1478,10 +1508,64 @@ E4`;
     }
     cleanA4Btn.addEventListener("click", applyCleanA4);
 
-    // ---- Tune lookup (The Session API → ABC → scientific pitch row) ----
+    // ---- Tune lookup and import (online catalogs + local ABC/MusicXML/MIDI) ----
     const SESSION_SEARCH_URL = "https://thesession.org/tunes/search";
     const SESSION_TUNE_URL = "https://thesession.org/tunes/";
+    const TUNEPAL_API_BASE = "https://tunepal.org/tunepal2";
+    const ADAPTER_URL_KEY = "saxNotesChart.catalogAdapterUrl";
+    const STEP_PC = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
     let lookupTuneCache = null;
+    let lookupSearchResults = [];
+    let tunepalSourceIds = null;
+
+    function trimAdapterBase(url) {
+      return String(url || "").trim().replace(/\/+$/, "");
+    }
+
+    function selectedTuneSource() {
+      return tuneSourceEl.value === "adapter" ? "adapter" : "session";
+    }
+
+    function updateLookupSourceUi() {
+      const isAdapter = selectedTuneSource() === "adapter";
+      catalogAdapterUrlEl.hidden = !isAdapter;
+      if (isAdapter) {
+        tuneSearchEl.placeholder = "Search adapter catalog (e.g. Autumn Leaves)";
+      } else if (selectedTuneSource() === "tunepal") {
+        tuneSearchEl.placeholder = "Search Tunepal (e.g. Cooley's Reel)";
+      } else {
+        tuneSearchEl.placeholder = "Search The Session (e.g. Morning Dew)";
+      }
+    }
+
+    function adapterFetchUrl(path, q) {
+      const base = trimAdapterBase(catalogAdapterUrlEl.value);
+      if (!base) {
+        throw new Error("Enter your adapter base URL first.");
+      }
+      if (q !== undefined) {
+        return `${base}${path}?q=${encodeURIComponent(q)}`;
+      }
+      return `${base}${path}`;
+    }
+
+    function baseNameFromFile(fileName) {
+      return String(fileName || "Imported tune").replace(/\.[^.]+$/, "");
+    }
+
+    function applyImportedText(mode, text, label) {
+      if (!text.trim()) throw new Error("No notes found to import.");
+      if (mode === "append") {
+        const sep = inputEl.value.trim() ? "\n\n" : "";
+        inputEl.value = inputEl.value.trimEnd() + sep + text.trim();
+      } else {
+        inputEl.value = text.trim();
+      }
+      saveDraft(inputEl.value);
+      scheduleRender();
+      syncUrl();
+      flash(label ? `Imported ${label}.` : "Imported notes.");
+    }
 
     function abcPitchToScientific(pitchObj, preferFlats) {
       const vp = pitchObj.verticalPos;
@@ -1501,6 +1585,23 @@ E4`;
       return parseScientific(normalized) ? normalized : null;
     }
 
+    function tuneObjectToNoteLine(tuneObj, preferFlats) {
+      const notes = [];
+      for (const line of tuneObj.lines || []) {
+        if (!line.staff) continue;
+        for (const st of line.staff) {
+          const voice = (st.voices && st.voices[0]) || [];
+          for (const el of voice) {
+            if (el.el_type !== "note" || !el.pitches || !el.pitches.length) continue;
+            const sci = abcPitchToScientific(el.pitches[0], preferFlats);
+            if (sci) notes.push(sci);
+          }
+        }
+      }
+      if (!notes.length) throw new Error("No notes found in this tune.");
+      return notes.join(" ");
+    }
+
     function buildAbcDocument(setting, tuneName) {
       const title = String(tuneName || "Tune").replace(/\n/g, " ");
       const key = setting.key || "C";
@@ -1514,27 +1615,221 @@ E4`;
       }
       const tunes = ABCJS.parseOnly(abcDoc);
       if (!tunes.length) throw new Error("Couldn't parse ABC from this setting.");
-      const notes = [];
-      for (const line of tunes[0].lines) {
-        if (!line.staff) continue;
-        for (const st of line.staff) {
-          const voice = (st.voices && st.voices[0]) || [];
-          for (const el of voice) {
-            if (el.el_type !== "note" || !el.pitches || !el.pitches.length) continue;
-            const sci = abcPitchToScientific(el.pitches[0], preferFlats);
-            if (sci) notes.push(sci);
-          }
-        }
-      }
-      if (!notes.length) throw new Error("No notes found in this setting.");
-      return notes.join(" ");
+      return tuneObjectToNoteLine(tunes[0], preferFlats);
     }
 
     function tuneRowFromSetting(tuneName, setting) {
       const preferFlats = preferFlatsEl.checked;
-      const line = abcDocumentToNoteLine(buildAbcDocument(setting, tuneName), preferFlats);
+      let line = String(setting.notes || "").trim();
+      if (!line) {
+        if (setting.abcDocument) {
+          line = abcDocumentToNoteLine(String(setting.abc || ""), preferFlats);
+        } else {
+          line = abcDocumentToNoteLine(buildAbcDocument(setting, tuneName), preferFlats);
+        }
+      }
       const keyLabel = setting.key ? ` · ${setting.key}` : "";
       return `; ${tuneName}${keyLabel}\n${line}`;
+    }
+
+    function parseAbcFileToRows(abcText, fileName) {
+      if (!window.ABCJS || typeof ABCJS.parseOnly !== "function") {
+        throw new Error("ABC parser still loading — try again in a moment.");
+      }
+      const tunes = ABCJS.parseOnly(String(abcText || ""));
+      if (!tunes.length) throw new Error("No ABC tunes found in this file.");
+      const preferFlats = preferFlatsEl.checked;
+      const rows = [];
+      for (let i = 0; i < tunes.length; i++) {
+        const tune = tunes[i];
+        try {
+          const line = tuneObjectToNoteLine(tune, preferFlats);
+          const title = (tune.metaText && tune.metaText.title) || `${baseNameFromFile(fileName)} ${i + 1}`;
+          rows.push(`; ${title}\n${line}`);
+        } catch (_) {
+          // Skip tune chunks with no parseable melody notes.
+        }
+      }
+      if (!rows.length) throw new Error("No notes found in ABC file.");
+      return rows;
+    }
+
+    function parseMusicXmlFileToRows(xmlText, fileName) {
+      const doc = new DOMParser().parseFromString(String(xmlText || ""), "application/xml");
+      if (doc.querySelector("parsererror")) throw new Error("Couldn't parse MusicXML file.");
+      const noteEls = Array.from(doc.querySelectorAll("part note"));
+      const preferFlats = preferFlatsEl.checked;
+      const notes = [];
+      for (const noteEl of noteEls) {
+        if (noteEl.querySelector("rest")) continue;
+        if (noteEl.querySelector("chord")) continue; // Keep a melody-like sequence.
+        const step = noteEl.querySelector("pitch > step")?.textContent?.trim()?.toUpperCase();
+        const octaveRaw = noteEl.querySelector("pitch > octave")?.textContent?.trim();
+        if (!step || STEP_PC[step] === undefined || !octaveRaw) continue;
+        const octave = Number(octaveRaw);
+        if (!Number.isFinite(octave)) continue;
+        const alterRaw = noteEl.querySelector("pitch > alter")?.textContent?.trim();
+        const alter = alterRaw ? Number(alterRaw) : 0;
+        if (!Number.isFinite(alter)) continue;
+        const midi = (octave + 1) * 12 + STEP_PC[step] + alter;
+        const sci = midiToScientific(Math.round(midi), preferFlats);
+        if (parseScientific(sci)) notes.push(sci);
+      }
+      if (!notes.length) throw new Error("No notes found in MusicXML file.");
+      const title = doc.querySelector("work > work-title, movement-title, part-list score-part part-name")?.textContent?.trim()
+        || baseNameFromFile(fileName);
+      return [`; ${title}\n${notes.join(" ")}`];
+    }
+
+    function parseMidiFileToRows(arrayBuffer, fileName) {
+      if (typeof window.Midi !== "function") {
+        throw new Error("MIDI parser still loading — try again in a moment.");
+      }
+      const midi = new window.Midi(arrayBuffer);
+      const tracks = midi.tracks
+        .filter(t => t.notes && t.notes.length && !(t.instrument && t.instrument.percussion))
+        .sort((a, b) => b.notes.length - a.notes.length);
+      if (!tracks.length) throw new Error("No pitched notes found in MIDI file.");
+      const preferFlats = preferFlatsEl.checked;
+      const notes = tracks[0].notes
+        .slice()
+        .sort((a, b) => a.time - b.time)
+        .map(n => midiToScientific(Math.round(n.midi), preferFlats))
+        .filter(n => parseScientific(n));
+      if (!notes.length) throw new Error("No usable note data in MIDI file.");
+      const title = midi.header.name || tracks[0].name || baseNameFromFile(fileName);
+      return [`; ${title}\n${notes.join(" ")}`];
+    }
+
+    async function runFileImport(mode) {
+      const file = tuneFileInputEl.files && tuneFileInputEl.files[0];
+      if (!file) {
+        flash("Pick a file first (.abc, .musicxml/.xml, .mid/.midi).");
+        return;
+      }
+      tuneFileReplaceBtn.disabled = true;
+      tuneFileAppendBtn.disabled = true;
+      try {
+        const lower = file.name.toLowerCase();
+        let rows = [];
+        if (lower.endsWith(".abc")) {
+          rows = parseAbcFileToRows(await file.text(), file.name);
+        } else if (lower.endsWith(".musicxml") || lower.endsWith(".xml")) {
+          rows = parseMusicXmlFileToRows(await file.text(), file.name);
+        } else if (lower.endsWith(".mid") || lower.endsWith(".midi")) {
+          rows = parseMidiFileToRows(await file.arrayBuffer(), file.name);
+        } else {
+          throw new Error("Unsupported file type. Use .abc, .musicxml/.xml, .mid/.midi.");
+        }
+        applyImportedText(mode, rows.join("\n\n"), `${rows.length} row(s) from ${file.name}`);
+      } catch (err) {
+        flash(err.message || "Couldn't import file.");
+      } finally {
+        tuneFileReplaceBtn.disabled = false;
+        tuneFileAppendBtn.disabled = false;
+      }
+    }
+
+    async function searchViaSession(q) {
+      const url = `${SESSION_SEARCH_URL}?q=${encodeURIComponent(q)}&format=json&perpage=20`;
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`Search failed (${res.status})`);
+      const data = await res.json();
+      const tunes = (data.tunes || []).map(t => ({
+        id: t.id,
+        name: t.name,
+        type: t.type,
+        source: "session"
+      }));
+      return { tunes, total: data.total ?? tunes.length };
+    }
+
+    async function searchViaAdapter(q) {
+      const res = await fetch(adapterFetchUrl("/search", q));
+      if (!res.ok) throw new Error(`Adapter search failed (${res.status})`);
+      const data = await res.json();
+      const tunes = (data.tunes || []).map(t => ({
+        id: t.id,
+        name: t.name,
+        type: t.type,
+        source: "adapter"
+      }));
+      return { tunes, total: data.total ?? tunes.length };
+    }
+
+    async function fetchTunepalSourceIds() {
+      if (tunepalSourceIds) return tunepalSourceIds;
+      const res = await fetch(`${TUNEPAL_API_BASE}/api/Sources`);
+      if (!res.ok) throw new Error(`Tunepal source list failed (${res.status})`);
+      const data = await res.json();
+      const ids = (data || []).map(s => s.id).filter(id => id !== null && id !== undefined);
+      if (!ids.length) throw new Error("Tunepal returned no source catalogs.");
+      tunepalSourceIds = ids.join(",");
+      return tunepalSourceIds;
+    }
+
+    async function searchViaTunepal(q) {
+      const sources = await fetchTunepalSourceIds();
+      const params = new URLSearchParams({
+        q,
+        sources,
+        latitude: "1",
+        longitude: "2",
+        client: "sax_chart",
+        key_sigs: "1",
+        local_tstamp: new Date().toISOString()
+      });
+      const res = await fetch(`${TUNEPAL_API_BASE}/api/keywordSearch?${params.toString()}`);
+      if (!res.ok) throw new Error(`Tunepal search failed (${res.status})`);
+      const data = await res.json();
+      const tunes = (data || [])
+        .filter(t => t && t.tunepalid && t.title)
+        .map(t => ({
+          id: t.tunepalid,
+          name: t.title,
+          type: t.tuneType,
+          source: "tunepal"
+        }));
+      return { tunes, total: tunes.length };
+    }
+
+    async function loadTuneViaSession(id) {
+      const res = await fetch(`${SESSION_TUNE_URL}${id}?format=json`);
+      if (!res.ok) throw new Error(`Couldn't load tune (${res.status})`);
+      const tune = await res.json();
+      if (!tune.settings || !tune.settings.length) {
+        throw new Error("This tune has no ABC settings on The Session.");
+      }
+      return tune;
+    }
+
+    async function loadTuneViaTunepal(id) {
+      const res = await fetch(`${TUNEPAL_API_BASE}/api/Tunes/${encodeURIComponent(id)}`);
+      if (!res.ok) throw new Error(`Couldn't load Tunepal tune (${res.status})`);
+      const tune = await res.json();
+      if (!tune.notation || !String(tune.notation).trim()) {
+        throw new Error("This Tunepal result has no ABC notation.");
+      }
+      return {
+        name: tune.title || "Tunepal tune",
+        settings: [{
+          id: tune.tunepalid || id,
+          key: tune.keySignature || "",
+          abc: String(tune.notation),
+          abcDocument: true,
+          title: tune.source || "Tunepal"
+        }]
+      };
+    }
+
+    async function loadTuneViaAdapter(id) {
+      const res = await fetch(adapterFetchUrl(`/tunes/${encodeURIComponent(id)}`));
+      if (!res.ok) throw new Error(`Couldn't load adapter tune (${res.status})`);
+      const tune = await res.json();
+      if (!tune.settings || !tune.settings.length) {
+        throw new Error("This adapter tune has no settings.");
+      }
+      return tune;
     }
 
     function applyTuneImport(mode) {
@@ -1550,16 +1845,8 @@ E4`;
       }
       try {
         const row = tuneRowFromSetting(lookupTuneCache.name, setting);
-        if (mode === "append") {
-          const sep = inputEl.value.trim() ? "\n\n" : "";
-          inputEl.value = inputEl.value.trimEnd() + sep + row;
-        } else {
-          inputEl.value = row;
-        }
-        saveDraft(inputEl.value);
-        scheduleRender();
-        syncUrl();
-        flash(`Added “${lookupTuneCache.name}” (${setting.key || "setting"}).`);
+        const label = setting.title || setting.key || "setting";
+        applyImportedText(mode, row, `“${lookupTuneCache.name}” (${label})`);
       } catch (err) {
         flash(err.message || "Couldn't import tune.");
       }
@@ -1576,24 +1863,13 @@ E4`;
         const opt = document.createElement("option");
         opt.value = String(s.id);
         const who = s.member && s.member.name ? ` · ${s.member.name}` : "";
-        opt.textContent = `${s.key || "unknown"}${who}`;
+        const extra = s.title ? ` · ${s.title}` : "";
+        opt.textContent = `${s.key || "unknown"}${who}${extra}`;
         tuneSettingSelectEl.appendChild(opt);
         if (idx === 0) opt.selected = true;
       });
       tuneSettingSelectEl.hidden = !tune.settings.length;
       if (tune.settings.length) tuneSettingSelectEl.value = String(tune.settings[0].id);
-    }
-
-    async function loadTuneById(id) {
-      const res = await fetch(`${SESSION_TUNE_URL}${id}?format=json`);
-      if (!res.ok) throw new Error(`Couldn't load tune (${res.status})`);
-      const tune = await res.json();
-      if (!tune.settings || !tune.settings.length) {
-        throw new Error("This tune has no ABC settings on The Session.");
-      }
-      populateTuneSettings(tune);
-      tunePickEl.hidden = false;
-      flash(`Loaded ${tune.settings.length} setting(s) for “${tune.name}”.`);
     }
 
     function populateTuneSearchResults(tunes) {
@@ -1602,11 +1878,14 @@ E4`;
       placeholder.value = "";
       placeholder.textContent = tunes.length ? "Pick a tune…" : "No matches";
       tuneResultSelectEl.appendChild(placeholder);
-      tunes.forEach(t => {
+      lookupSearchResults = tunes.slice();
+      tunes.forEach((t, idx) => {
         const opt = document.createElement("option");
-        opt.value = String(t.id);
+        opt.value = String(idx + 1);
         const type = t.type ? ` (${t.type})` : "";
-        opt.textContent = `${t.name}${type}`;
+        const sourceLabel = t.source === "adapter" ? " [adapter]" : "";
+        const sourceLabel2 = t.source === "tunepal" ? " [tunepal]" : "";
+        opt.textContent = `${t.name}${type}${sourceLabel}${sourceLabel2}`;
         tuneResultSelectEl.appendChild(opt);
       });
       lookupTuneCache = null;
@@ -1623,14 +1902,15 @@ E4`;
       }
       tuneSearchBtn.disabled = true;
       try {
-        const url = `${SESSION_SEARCH_URL}?q=${encodeURIComponent(q)}&format=json&perpage=20`;
-        const res = await fetch(url);
-        if (!res.ok) throw new Error(`Search failed (${res.status})`);
-        const data = await res.json();
-        const tunes = data.tunes || [];
+        const searchResult = selectedTuneSource() === "adapter"
+          ? await searchViaAdapter(q)
+          : selectedTuneSource() === "tunepal"
+            ? await searchViaTunepal(q)
+            : await searchViaSession(q);
+        const tunes = searchResult.tunes || [];
         populateTuneSearchResults(tunes);
         if (!tunes.length) flash(`No tunes found for “${q}”.`);
-        else flash(`${data.total ?? tunes.length} match(es) — pick one below.`);
+        else flash(`${searchResult.total ?? tunes.length} match(es) — pick one below.`);
       } catch (err) {
         flash(err.message || "Tune search failed.");
       } finally {
@@ -1638,16 +1918,38 @@ E4`;
       }
     }
 
+    tuneSourceEl.value = "session";
+    const savedAdapterUrl = localStorage.getItem(ADAPTER_URL_KEY);
+    if (savedAdapterUrl) catalogAdapterUrlEl.value = savedAdapterUrl;
+    updateLookupSourceUi();
+
+    tuneSourceEl.addEventListener("change", () => {
+      updateLookupSourceUi();
+      tunePickEl.hidden = true;
+      lookupTuneCache = null;
+      lookupSearchResults = [];
+    });
+    catalogAdapterUrlEl.addEventListener("change", () => {
+      localStorage.setItem(ADAPTER_URL_KEY, trimAdapterBase(catalogAdapterUrlEl.value));
+    });
     tuneSearchBtn.addEventListener("click", runTuneSearch);
     tuneSearchEl.addEventListener("keydown", (e) => {
       if (e.key === "Enter") { e.preventDefault(); runTuneSearch(); }
     });
     tuneResultSelectEl.addEventListener("change", async () => {
-      const id = tuneResultSelectEl.value;
-      if (!id) return;
+      const idx = Number(tuneResultSelectEl.value) - 1;
+      const picked = lookupSearchResults[idx];
+      if (!picked) return;
       tuneSearchBtn.disabled = true;
       try {
-        await loadTuneById(id);
+        const tune = picked.source === "adapter"
+          ? await loadTuneViaAdapter(picked.id)
+          : picked.source === "tunepal"
+            ? await loadTuneViaTunepal(picked.id)
+            : await loadTuneViaSession(picked.id);
+        populateTuneSettings(tune);
+        tunePickEl.hidden = false;
+        flash(`Loaded ${tune.settings.length} setting(s) for “${tune.name}”.`);
       } catch (err) {
         flash(err.message || "Couldn't load tune.");
       } finally {
@@ -1656,6 +1958,8 @@ E4`;
     });
     tuneReplaceBtn.addEventListener("click", () => applyTuneImport("replace"));
     tuneAppendBtn.addEventListener("click", () => applyTuneImport("append"));
+    tuneFileReplaceBtn.addEventListener("click", () => runFileImport("replace"));
+    tuneFileAppendBtn.addEventListener("click", () => runFileImport("append"));
 
     window.addEventListener("hashchange", () => {
       const p = parseHash();

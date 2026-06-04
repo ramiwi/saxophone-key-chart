@@ -2,16 +2,24 @@
 
 ## Summary
 
-`notes-to-chart.html` includes an **online tune lookup** panel above the note textarea (`#input`). It searches [The Session](https://thesession.org/tunes) for Irish traditional tunes, downloads ABC transcriptions, converts the melody to scientific pitch names (e.g. `B4`, `C#5`), and inserts them into the input on demand.
+`notes-to-chart.html` includes an **online tune lookup** panel above the note textarea (`#input`) with two source modes:
 
-This is **not** a general web search for arbitrary songs. It works because The Session exposes a read-only JSON API with CORS enabled (`Access-Control-Allow-Origin: *`), and the page can parse ABC in the browser.
+- **The Session (built-in):** searches [The Session](https://thesession.org/tunes), loads ABC settings, and converts melody notes to scientific pitch names.
+- **Tunepal (built-in):** searches [Tunepal](https://tunepal.org/) and loads ABC notation for matched traditional tunes.
+- **Catalog adapter (backend):** calls your own backend API so you can bridge larger tune collections and normalize them into this app's expected shape.
+
+It also supports **local file import**: `.abc`, `.musicxml`/`.xml`, and `.mid`/`.midi`.
 
 ## User workflow
 
-1. Enter a tune name in **Look up tune online** and click **Search** (or press Enter).
-2. Pick a tune from the results dropdown.
-3. Pick a **transcription setting** (key and contributor vary per setting).
-4. Click **Replace input** to overwrite the textarea, or **Append** to add after existing rows.
+1. Choose a source:
+   - **The Session** for built-in Irish trad lookup, or
+   - **Tunepal** for a larger built-in traditional tune corpus, or
+   - **Catalog adapter** and enter your backend base URL.
+2. Enter a tune name and click **Search** (or press Enter).
+3. Pick a tune from results, then pick a **transcription setting**.
+4. Click **Replace input** or **Append**.
+5. For manual import, choose a local file and click **Import file (replace)** or **Import file (append)**.
 
 Imported text looks like:
 
@@ -28,34 +36,40 @@ The `;` line is a row title (existing Notes → key charts behavior). The next l
 | --- | --- |
 | [The Session search API](https://thesession.org/api) | `GET /tunes/search?q=…&format=json&perpage=20` |
 | [The Session tune API](https://thesession.org/api) | `GET /tunes/{id}?format=json` — returns `settings[]` with `key` and `abc` |
-| [abcjs](https://github.com/paulrosen/abcjs) (CDN 6.4.4) | `ABCJS.parseOnly()` to read note elements from ABC |
-| In-page conversion | `verticalPos` → octave; accidentals → `#` / `b`; respects **Prefer flats** |
+| Tunepal API | `GET /tunepal2/api/keywordSearch?...` and `GET /tunepal2/api/Tunes/{id}` |
+| Catalog adapter (custom backend) | `GET /search?q=…` and `GET /tunes/{id}` returning `tunes[]` / `settings[]` JSON |
+| [abcjs](https://github.com/paulrosen/abcjs) (CDN 6.4.4) | `ABCJS.parseOnly()` for ABC lookup and `.abc` file import |
+| [@tonejs/midi](https://github.com/Tonejs/Midi) (CDN 2.0.28) | Parses `.mid`/`.midi` files in-browser |
+| In-page conversion | `verticalPos` (middle C = `C4`) → octave; accidentals → `#` / `b`; respects **Prefer flats** |
 
 Conversion rules:
 
-- Uses the **first voice** only (melody line).
-- For chords, uses the **first pitch** in each note element.
+- ABC uses the **first voice** only (melody line).
+- ABC chords use the **first pitch** in each note element.
+- MusicXML import skips `<rest>` and `<chord/>` notes to keep a melody-like sequence.
+- MIDI import picks the non-percussion track with the most notes and orders notes by time.
 - Output is a single space-separated row; column alignment via leading spaces is still manual, same as pasted notes.
 
 ## Files touched
 
-- `notes-to-chart.html` — UI (`.tune-lookup`), styles, and lookup script
-- `notes-to-chart.html` — script tag for `abcjs-basic-min.js` (deferred, alongside existing VexFlow)
+- `notes-to-chart.html` — UI (`.tune-lookup`), styles, source selector, adapter URL, and file import controls
+- `notes-to-chart.html` — script tags for `abcjs-basic-min.js` and `@tonejs/midi` (deferred)
 
 Print layout hides the lookup panel (same as other `.no-print` controls).
 
 ## Limitations
 
-- **Source:** Irish trad / session repertoire on thesession.org, not pop, jazz charts, or MuseScore links.
-- **Format:** Monophonic melody from ABC; no chords, lyrics, or rhythm spacing in the textarea.
-- **Browser-only:** No backend proxy; sites without CORS or ABC cannot be integrated this way.
+- **Source quality:** Adapter search breadth depends on your backend integrations and licensing/terms.
+- **Tunepal search semantics:** Tunepal ranking and metadata differ from The Session (source collections, tune types, key labels).
+- **Format:** Import is melody-oriented; no chord charts, lyrics, or rhythm spacing in the textarea.
+- **Adapter contract:** The backend must return normalized tune/settings JSON expected by the UI.
 - **Range / fingering:** Notes outside the sax schema still render as missing cards, same as manual input.
 
-## Possible extensions (not implemented)
+## Possible extensions
 
-- Serverless proxy for other ABC archives
-- MusicXML import
-- Link-out to external search with manual paste
+- Rich adapter metadata (composer, style, source URL)
+- Multi-track MIDI picker in UI
+- Link-out to source pages with one-click open
 - Multi-row import (e.g. one ABC part per textarea line)
 
 ## Related
