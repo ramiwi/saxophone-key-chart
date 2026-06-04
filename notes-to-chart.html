@@ -15,6 +15,8 @@
   <!-- Music-notation rendering for the optional per-row staff. UMD build
        exposes window.Vex (Vex.Flow). Deferred so it runs before our render. -->
   <script src="https://cdn.jsdelivr.net/npm/vexflow@4.2.2/build/cjs/vexflow.js" defer></script>
+  <!-- ABC parser for tune lookup (The Session → scientific pitch rows). -->
+  <script src="https://cdn.jsdelivr.net/npm/abcjs@6.4.4/dist/abcjs-basic-min.js" defer></script>
   <style>
     :root {
       --bg: #ffffff;
@@ -76,6 +78,66 @@
       white-space: pre;
       overflow-wrap: normal;
     }
+    .tune-lookup {
+      margin-bottom: 12px;
+      padding: 10px 12px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: #fafafa;
+    }
+    .tune-lookup > label {
+      font-size: .82rem;
+      font-weight: 600;
+      color: var(--ink);
+      margin-bottom: 8px;
+    }
+    .lookup-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+    .lookup-row input[type="search"] {
+      flex: 1 1 12rem;
+      min-width: 0;
+      padding: 8px 10px;
+      border: 1px solid var(--line);
+      border-radius: 4px;
+      font: inherit;
+    }
+    .lookup-row button {
+      padding: 8px 12px;
+      border: 1px solid var(--line);
+      border-radius: 4px;
+      font: inherit;
+      background: #fff;
+      cursor: pointer;
+    }
+    .lookup-row button:disabled { opacity: 0.55; cursor: wait; }
+    .lookup-pick {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+      margin-top: 8px;
+    }
+    .lookup-pick select {
+      flex: 1 1 10rem;
+      min-width: 0;
+      max-width: 100%;
+      padding: 6px 8px;
+      border: 1px solid var(--line);
+      border-radius: 4px;
+      font: inherit;
+    }
+    .lookup-hint {
+      margin: 8px 0 0;
+      font-size: .75rem;
+      color: var(--muted);
+      line-height: 1.4;
+    }
+    .lookup-hint a { color: var(--ink); }
     .toolbar {
       display: flex;
       flex-wrap: wrap;
@@ -349,7 +411,7 @@
          doubling it. */
       @page { size: A4 portrait; margin: 0; }
       .no-print { display: none !important; }
-      .panel, .sub, .legend, #status { display: none !important; }
+      .panel, .sub, .legend, #status, .tune-lookup { display: none !important; }
       html, body { background: #fff; }
       .wrap { max-width: none; margin: 0; padding: var(--page-margin, 16px); }
       h1 { font-size: 1.1rem; margin-bottom: 6px; }
@@ -385,6 +447,28 @@
 
     <div class="panel no-print">
       <div>
+        <div class="tune-lookup">
+          <label for="tuneSearch">Look up tune online</label>
+          <div class="lookup-row">
+            <input type="search" id="tuneSearch" placeholder="Search The Session (e.g. Morning Dew)" autocomplete="off" />
+            <button type="button" id="tuneSearchBtn">Search</button>
+          </div>
+          <div class="lookup-pick" id="tunePick" hidden>
+            <select id="tuneResultSelect" aria-label="Search results">
+              <option value="">Pick a tune…</option>
+            </select>
+            <select id="tuneSettingSelect" aria-label="Transcription setting" hidden>
+              <option value="">Setting…</option>
+            </select>
+            <button type="button" id="tuneReplaceBtn">Replace input</button>
+            <button type="button" id="tuneAppendBtn">Append</button>
+          </div>
+          <p class="lookup-hint">
+            Searches <a href="https://thesession.org/tunes" target="_blank" rel="noopener">thesession.org</a>
+            (Irish traditional tunes in ABC notation) and converts the first melody line to scientific pitch names.
+            Arbitrary “search the web” for pop songs is not available in the browser without a paid API or server proxy.
+          </p>
+        </div>
         <label for="input">Note lines (one row per line)</label>
         <textarea id="input" spellcheck="false" placeholder="B3   B4 B4           C5"></textarea>
       </div>
@@ -627,6 +711,13 @@ E4`;
     const deletePresetBtn = document.getElementById("deletePresetBtn");
     const copyLinkBtn = document.getElementById("copyLinkBtn");
     const saveStatusEl = document.getElementById("saveStatus");
+    const tuneSearchEl = document.getElementById("tuneSearch");
+    const tuneSearchBtn = document.getElementById("tuneSearchBtn");
+    const tunePickEl = document.getElementById("tunePick");
+    const tuneResultSelectEl = document.getElementById("tuneResultSelect");
+    const tuneSettingSelectEl = document.getElementById("tuneSettingSelect");
+    const tuneReplaceBtn = document.getElementById("tuneReplaceBtn");
+    const tuneAppendBtn = document.getElementById("tuneAppendBtn");
 
     function showStatus(message, isError = false) {
       statusEl.hidden = false;
@@ -1386,6 +1477,184 @@ E4`;
       flash("Applied Clean A4 layout — use your browser's Print.");
     }
     cleanA4Btn.addEventListener("click", applyCleanA4);
+
+    // ---- Tune lookup (The Session API → ABC → scientific pitch row) ----
+    const SESSION_SEARCH_URL = "https://thesession.org/tunes/search";
+    const SESSION_TUNE_URL = "https://thesession.org/tunes/";
+    let lookupTuneCache = null;
+
+    function abcPitchToScientific(pitchObj, preferFlats) {
+      const vp = pitchObj.verticalPos;
+      if (typeof vp !== "number") return null;
+      const octave = Math.floor(vp / 7) + 3;
+      const m = String(pitchObj.name).match(/[_=^]?([A-Ga-g])/);
+      if (!m) return null;
+      const letter = m[1].toUpperCase();
+      let acc = "";
+      if (pitchObj.accidental === "sharp") acc = "#";
+      else if (pitchObj.accidental === "flat") acc = "b";
+      else if (/^[^A-Ga-g]*\^/.test(pitchObj.name)) acc = "#";
+      else if (/^[^A-Ga-g]*_/.test(pitchObj.name)) acc = "b";
+      const raw = letter + acc + octave;
+      const normalized = normalizePitchName(raw, preferFlats);
+      return parseScientific(normalized) ? normalized : null;
+    }
+
+    function buildAbcDocument(setting, tuneName) {
+      const title = String(tuneName || "Tune").replace(/\n/g, " ");
+      const key = setting.key || "C";
+      const body = String(setting.abc || "").trim();
+      return `X:1\nT:${title}\nM:4/4\nL:1/8\nK:${key}\n${body}\n`;
+    }
+
+    function abcDocumentToNoteLine(abcDoc, preferFlats) {
+      if (!window.ABCJS || typeof ABCJS.parseOnly !== "function") {
+        throw new Error("ABC parser still loading — try again in a moment.");
+      }
+      const tunes = ABCJS.parseOnly(abcDoc);
+      if (!tunes.length) throw new Error("Couldn't parse ABC from this setting.");
+      const notes = [];
+      for (const line of tunes[0].lines) {
+        if (!line.staff) continue;
+        for (const st of line.staff) {
+          const voice = (st.voices && st.voices[0]) || [];
+          for (const el of voice) {
+            if (el.el_type !== "note" || !el.pitches || !el.pitches.length) continue;
+            const sci = abcPitchToScientific(el.pitches[0], preferFlats);
+            if (sci) notes.push(sci);
+          }
+        }
+      }
+      if (!notes.length) throw new Error("No notes found in this setting.");
+      return notes.join(" ");
+    }
+
+    function tuneRowFromSetting(tuneName, setting) {
+      const preferFlats = preferFlatsEl.checked;
+      const line = abcDocumentToNoteLine(buildAbcDocument(setting, tuneName), preferFlats);
+      const keyLabel = setting.key ? ` · ${setting.key}` : "";
+      return `; ${tuneName}${keyLabel}\n${line}`;
+    }
+
+    function applyTuneImport(mode) {
+      if (!lookupTuneCache) {
+        flash("Search and pick a tune first.");
+        return;
+      }
+      const settingId = tuneSettingSelectEl.value;
+      const setting = lookupTuneCache.settings.find(s => String(s.id) === settingId);
+      if (!setting) {
+        flash("Pick a transcription setting.");
+        return;
+      }
+      try {
+        const row = tuneRowFromSetting(lookupTuneCache.name, setting);
+        if (mode === "append") {
+          const sep = inputEl.value.trim() ? "\n\n" : "";
+          inputEl.value = inputEl.value.trimEnd() + sep + row;
+        } else {
+          inputEl.value = row;
+        }
+        saveDraft(inputEl.value);
+        scheduleRender();
+        syncUrl();
+        flash(`Added “${lookupTuneCache.name}” (${setting.key || "setting"}).`);
+      } catch (err) {
+        flash(err.message || "Couldn't import tune.");
+      }
+    }
+
+    function populateTuneSettings(tune) {
+      lookupTuneCache = tune;
+      tuneSettingSelectEl.replaceChildren();
+      const placeholder = document.createElement("option");
+      placeholder.value = "";
+      placeholder.textContent = tune.settings.length ? "Pick a setting…" : "No settings";
+      tuneSettingSelectEl.appendChild(placeholder);
+      tune.settings.forEach((s, idx) => {
+        const opt = document.createElement("option");
+        opt.value = String(s.id);
+        const who = s.member && s.member.name ? ` · ${s.member.name}` : "";
+        opt.textContent = `${s.key || "unknown"}${who}`;
+        tuneSettingSelectEl.appendChild(opt);
+        if (idx === 0) opt.selected = true;
+      });
+      tuneSettingSelectEl.hidden = !tune.settings.length;
+      if (tune.settings.length) tuneSettingSelectEl.value = String(tune.settings[0].id);
+    }
+
+    async function loadTuneById(id) {
+      const res = await fetch(`${SESSION_TUNE_URL}${id}?format=json`);
+      if (!res.ok) throw new Error(`Couldn't load tune (${res.status})`);
+      const tune = await res.json();
+      if (!tune.settings || !tune.settings.length) {
+        throw new Error("This tune has no ABC settings on The Session.");
+      }
+      populateTuneSettings(tune);
+      tunePickEl.hidden = false;
+      flash(`Loaded ${tune.settings.length} setting(s) for “${tune.name}”.`);
+    }
+
+    function populateTuneSearchResults(tunes) {
+      tuneResultSelectEl.replaceChildren();
+      const placeholder = document.createElement("option");
+      placeholder.value = "";
+      placeholder.textContent = tunes.length ? "Pick a tune…" : "No matches";
+      tuneResultSelectEl.appendChild(placeholder);
+      tunes.forEach(t => {
+        const opt = document.createElement("option");
+        opt.value = String(t.id);
+        const type = t.type ? ` (${t.type})` : "";
+        opt.textContent = `${t.name}${type}`;
+        tuneResultSelectEl.appendChild(opt);
+      });
+      lookupTuneCache = null;
+      tuneSettingSelectEl.hidden = true;
+      tunePickEl.hidden = false;
+    }
+
+    async function runTuneSearch() {
+      const q = tuneSearchEl.value.trim();
+      if (!q) {
+        flash("Enter a tune name to search.");
+        tuneSearchEl.focus();
+        return;
+      }
+      tuneSearchBtn.disabled = true;
+      try {
+        const url = `${SESSION_SEARCH_URL}?q=${encodeURIComponent(q)}&format=json&perpage=20`;
+        const res = await fetch(url);
+        if (!res.ok) throw new Error(`Search failed (${res.status})`);
+        const data = await res.json();
+        const tunes = data.tunes || [];
+        populateTuneSearchResults(tunes);
+        if (!tunes.length) flash(`No tunes found for “${q}”.`);
+        else flash(`${data.total ?? tunes.length} match(es) — pick one below.`);
+      } catch (err) {
+        flash(err.message || "Tune search failed.");
+      } finally {
+        tuneSearchBtn.disabled = false;
+      }
+    }
+
+    tuneSearchBtn.addEventListener("click", runTuneSearch);
+    tuneSearchEl.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") { e.preventDefault(); runTuneSearch(); }
+    });
+    tuneResultSelectEl.addEventListener("change", async () => {
+      const id = tuneResultSelectEl.value;
+      if (!id) return;
+      tuneSearchBtn.disabled = true;
+      try {
+        await loadTuneById(id);
+      } catch (err) {
+        flash(err.message || "Couldn't load tune.");
+      } finally {
+        tuneSearchBtn.disabled = false;
+      }
+    });
+    tuneReplaceBtn.addEventListener("click", () => applyTuneImport("replace"));
+    tuneAppendBtn.addEventListener("click", () => applyTuneImport("append"));
 
     window.addEventListener("hashchange", () => {
       const p = parseHash();
