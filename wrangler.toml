@@ -1,0 +1,11 @@
+name = "sax-chart"
+compatibility_date = "2026-06-04"
+
+[vars]
+# Optional: set this only if API runs on another origin.
+# CLOUD_PRESETS_API_BASE = "https://your-pages-project.pages.dev"
+
+[[d1_databases]]
+binding = "PRESETS_DB"
+database_name = "sax-chart-presets"
+database_id = "42448e3a-60cf-45e6-9b56-0138cae902a7"

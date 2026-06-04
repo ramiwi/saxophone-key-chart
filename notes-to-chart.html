@@ -629,6 +629,14 @@
         Presets
         <select id="presetSelect"></select>
       </label>
+      <label>
+        Preset storage
+        <select id="presetStoreMode">
+          <option value="local">Local only</option>
+          <option value="hybrid">Local + cloud backup</option>
+          <option value="cloud">Cloud sync</option>
+        </select>
+      </label>
       <button type="button" id="savePresetBtn" data-ui-icon="bookmark">Save preset</button>
       <button type="button" id="deletePresetBtn" data-ui-icon="trash">Delete</button>
       <button type="button" id="copyLinkBtn" data-ui-icon="link">Copy shareable link</button>
@@ -732,6 +740,7 @@ E4`;
     const renderBtn = document.getElementById("renderBtn");
     const schemaInfoEl = document.getElementById("schemaInfo");
     const presetSelectEl = document.getElementById("presetSelect");
+    const presetStoreModeEl = document.getElementById("presetStoreMode");
     const savePresetBtn = document.getElementById("savePresetBtn");
     const deletePresetBtn = document.getElementById("deletePresetBtn");
     const copyLinkBtn = document.getElementById("copyLinkBtn");
@@ -1329,7 +1338,11 @@ E4`;
     // ---- Persistence: auto-saved draft, named presets, shareable link ----
     const LS_DRAFT = "notesToChart.draft";
     const LS_PRESETS = "notesToChart.presets";
+    const LS_PRESET_MODE = "notesToChart.presetMode";
+    const LS_PRESET_DEVICE = "notesToChart.presetDeviceId";
+    const DEFAULT_PRESET_MODE = "local";
     let flashTimer = null;
+    let activePresetMap = {};
 
     function flash(message) {
       saveStatusEl.textContent = message;
@@ -1345,18 +1358,116 @@ E4`;
       try { return localStorage.getItem(LS_DRAFT); } catch (e) { return null; }
     }
 
-    function loadPresets() {
+    function loadLocalPresets() {
       try { return JSON.parse(localStorage.getItem(LS_PRESETS)) || {}; }
       catch (e) { return {}; }
     }
 
-    function storePresets(presets) {
+    function storeLocalPresets(presets) {
       try { localStorage.setItem(LS_PRESETS, JSON.stringify(presets)); }
       catch (e) { flash("Couldn't save — storage is full or unavailable."); }
     }
 
-    function refreshPresetSelect(selectedName) {
-      const presets = loadPresets();
+    function readPresetMode() {
+      try { return localStorage.getItem(LS_PRESET_MODE) || DEFAULT_PRESET_MODE; }
+      catch (e) { return DEFAULT_PRESET_MODE; }
+    }
+
+    function writePresetMode(mode) {
+      try { localStorage.setItem(LS_PRESET_MODE, mode); } catch (e) { /* noop */ }
+    }
+
+    function getPresetDeviceId() {
+      let id = null;
+      try { id = localStorage.getItem(LS_PRESET_DEVICE); } catch (e) { /* noop */ }
+      if (id) return id;
+      const generated = window.crypto && typeof crypto.randomUUID === "function"
+        ? crypto.randomUUID()
+        : `device-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      try { localStorage.setItem(LS_PRESET_DEVICE, generated); } catch (e) { /* noop */ }
+      return generated;
+    }
+
+    function getPresetApiRoot() {
+      const base = String(window.CLOUD_PRESETS_API_BASE || "").trim().replace(/\/+$/, "");
+      return base ? `${base}/api/presets` : "/api/presets";
+    }
+
+    async function readApiError(res, fallback) {
+      try {
+        const payload = await res.json();
+        if (payload && payload.error) return payload.error;
+      } catch (e) {
+        // Ignore JSON parse errors and use fallback.
+      }
+      return fallback;
+    }
+
+    async function fetchCloudPresets() {
+      const res = await fetch(getPresetApiRoot(), {
+        headers: { "X-Device-Id": getPresetDeviceId() }
+      });
+      if (!res.ok) {
+        const msg = await readApiError(res, `Cloud preset fetch failed (${res.status})`);
+        throw new Error(msg);
+      }
+      const payload = await res.json();
+      const list = Array.isArray(payload && payload.presets) ? payload.presets : [];
+      const map = {};
+      for (const item of list) {
+        if (!item || typeof item.name !== "string" || typeof item.notesText !== "string") continue;
+        map[item.name] = item.notesText;
+      }
+      return map;
+    }
+
+    async function upsertCloudPreset(name, notesText) {
+      const res = await fetch(`${getPresetApiRoot()}/${encodeURIComponent(name)}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Device-Id": getPresetDeviceId()
+        },
+        body: JSON.stringify({ notesText })
+      });
+      if (!res.ok) {
+        const msg = await readApiError(res, `Cloud preset save failed (${res.status})`);
+        throw new Error(msg);
+      }
+    }
+
+    async function removeCloudPreset(name) {
+      const res = await fetch(`${getPresetApiRoot()}/${encodeURIComponent(name)}`, {
+        method: "DELETE",
+        headers: { "X-Device-Id": getPresetDeviceId() }
+      });
+      if (!res.ok) {
+        const msg = await readApiError(res, `Cloud preset delete failed (${res.status})`);
+        throw new Error(msg);
+      }
+    }
+
+    async function refreshPresetSelect(selectedName) {
+      const mode = presetStoreModeEl.value || DEFAULT_PRESET_MODE;
+      const localPresets = loadLocalPresets();
+      let resolved = localPresets;
+
+      if (mode !== "local") {
+        try {
+          const cloudPresets = await fetchCloudPresets();
+          resolved = mode === "cloud" ? cloudPresets : { ...cloudPresets, ...localPresets };
+        } catch (err) {
+          if (mode === "cloud") {
+            flash(`${err.message} — showing local presets.`);
+          } else {
+            flash(`Cloud sync unavailable — using local presets.`);
+          }
+          resolved = localPresets;
+        }
+      }
+
+      activePresetMap = resolved;
+      const presets = resolved;
       const names = Object.keys(presets).sort((a, b) => a.localeCompare(b));
       presetSelectEl.replaceChildren();
       const placeholder = document.createElement("option");
@@ -1447,7 +1558,7 @@ E4`;
     presetSelectEl.addEventListener("change", () => {
       const name = presetSelectEl.value;
       if (!name) return;
-      const presets = loadPresets();
+      const presets = activePresetMap;
       if (presets[name] === undefined) return;
       inputEl.value = presets[name];
       saveDraft(inputEl.value);
@@ -1456,26 +1567,63 @@ E4`;
       flash(`Loaded “${name}”.`);
     });
 
-    savePresetBtn.addEventListener("click", () => {
+    presetStoreModeEl.addEventListener("change", () => {
+      writePresetMode(presetStoreModeEl.value || DEFAULT_PRESET_MODE);
+      refreshPresetSelect(presetSelectEl.value);
+    });
+
+    savePresetBtn.addEventListener("click", async () => {
       const suggested = presetSelectEl.value || "";
       const name = (prompt("Save preset as:", suggested) || "").trim();
       if (!name) return;
-      const presets = loadPresets();
-      presets[name] = inputEl.value;
-      storePresets(presets);
-      refreshPresetSelect(name);
-      flash(`Saved “${name}”.`);
+      const mode = presetStoreModeEl.value || DEFAULT_PRESET_MODE;
+      let localSaved = false;
+      try {
+        if (mode !== "cloud") {
+          const presets = loadLocalPresets();
+          presets[name] = inputEl.value;
+          storeLocalPresets(presets);
+          localSaved = true;
+        }
+        if (mode !== "local") {
+          await upsertCloudPreset(name, inputEl.value);
+        }
+        await refreshPresetSelect(name);
+        if (mode === "local") flash(`Saved “${name}” locally.`);
+        else if (mode === "cloud") flash(`Saved “${name}” to cloud.`);
+        else flash(`Saved “${name}” locally and to cloud.`);
+      } catch (err) {
+        await refreshPresetSelect(name);
+        if (localSaved) flash(`Saved locally, but cloud sync failed.`);
+        else flash(err.message || "Couldn't save preset.");
+      }
     });
 
-    deletePresetBtn.addEventListener("click", () => {
+    deletePresetBtn.addEventListener("click", async () => {
       const name = presetSelectEl.value;
       if (!name) { flash("Pick a preset to delete first."); return; }
       if (!confirm(`Delete preset “${name}”?`)) return;
-      const presets = loadPresets();
-      delete presets[name];
-      storePresets(presets);
-      refreshPresetSelect("");
-      flash(`Deleted “${name}”.`);
+      const mode = presetStoreModeEl.value || DEFAULT_PRESET_MODE;
+      let localDeleted = false;
+      try {
+        if (mode !== "cloud") {
+          const presets = loadLocalPresets();
+          delete presets[name];
+          storeLocalPresets(presets);
+          localDeleted = true;
+        }
+        if (mode !== "local") {
+          await removeCloudPreset(name);
+        }
+        await refreshPresetSelect("");
+        if (mode === "local") flash(`Deleted “${name}” locally.`);
+        else if (mode === "cloud") flash(`Deleted “${name}” from cloud.`);
+        else flash(`Deleted “${name}” locally and from cloud.`);
+      } catch (err) {
+        await refreshPresetSelect(name);
+        if (localDeleted) flash("Deleted locally, but cloud delete failed.");
+        else flash(err.message || "Couldn't delete preset.");
+      }
     });
 
     copyLinkBtn.addEventListener("click", copyShareLink);
@@ -2016,6 +2164,11 @@ E4`;
       : SAMPLE;
     inputEl.value = applyKeyChartImport(initialNotes);
     saveDraft(inputEl.value);
+    presetStoreModeEl.value = readPresetMode();
+    if (!["local", "hybrid", "cloud"].includes(presetStoreModeEl.value)) {
+      presetStoreModeEl.value = DEFAULT_PRESET_MODE;
+      writePresetMode(DEFAULT_PRESET_MODE);
+    }
     refreshPresetSelect("");
     syncUrl();
 
