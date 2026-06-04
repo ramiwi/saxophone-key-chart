@@ -1486,7 +1486,8 @@ E4`;
     function abcPitchToScientific(pitchObj, preferFlats) {
       const vp = pitchObj.verticalPos;
       if (typeof vp !== "number") return null;
-      const octave = Math.floor(vp / 7) + 3;
+      // In abcjs, verticalPos is relative to middle C (C4 = 0).
+      const octave = Math.floor(vp / 7) + 4;
       const m = String(pitchObj.name).match(/[_=^]?([A-Ga-g])/);
       if (!m) return null;
       const letter = m[1].toUpperCase();
@@ -1495,8 +1496,8 @@ E4`;
       else if (pitchObj.accidental === "flat") acc = "b";
       else if (/^[^A-Ga-g]*\^/.test(pitchObj.name)) acc = "#";
       else if (/^[^A-Ga-g]*_/.test(pitchObj.name)) acc = "b";
-      const raw = letter + acc + octave;
-      const normalized = normalizePitchName(raw, preferFlats);
+      const normalizedName = normalizePitchName(letter + acc, preferFlats);
+      const normalized = normalizedName + octave;
       return parseScientific(normalized) ? normalized : null;
     }
 
