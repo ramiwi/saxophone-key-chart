@@ -194,6 +194,25 @@
       margin-bottom: 12px;
     }
     .status.error { border-width: 2px; border-color: #000; }
+    .export-bar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+      margin-bottom: 10px;
+    }
+    .export-bar button {
+      padding: 8px 10px;
+      border: 1px solid var(--line);
+      border-radius: 4px;
+      font: inherit;
+      color: var(--ink);
+      background: #fff;
+      cursor: pointer;
+    }
+    .export-bar button:hover {
+      border-color: var(--ink);
+    }
     @media (max-width: 900px) {
       .controls { grid-template-columns: repeat(2, minmax(120px, 1fr)); }
     }
@@ -207,6 +226,7 @@
       .wrap { max-width: none; margin: 0; padding: 0; }
       .no-print,
       .controls,
+      .export-bar,
       .status,
       .sub { display: none !important; }
       .legend {
@@ -318,9 +338,18 @@
     </div>
 
     <div id="title" class="scale-title"></div>
+    <div class="export-bar no-print">
+      <button type="button" id="sendNotesReplace" title="Open Notes → charts with this scale as one row (replaces the note lines textarea).">
+        Send to Notes → charts
+      </button>
+      <button type="button" id="sendNotesAppend" title="Add this scale after existing note lines on Notes → charts.">
+        Append to Notes → charts
+      </button>
+    </div>
     <div id="cards" class="grid"></div>
   </div>
 
+  <script src="chart-transfer.js"></script>
   <script src="schema.js"></script>
   <script src="diagram.js"></script>
   <script>
@@ -368,6 +397,8 @@
     const titleEl = document.getElementById("title");
     const cardsEl = document.getElementById("cards");
     const schemaInfoEl = document.getElementById("schemaInfo");
+    const sendNotesReplaceEl = document.getElementById("sendNotesReplace");
+    const sendNotesAppendEl = document.getElementById("sendNotesAppend");
 
     const VALID_REGISTERS = new Set(["all", "low", "main", "middle", "upper", "palm"]);
     const URL_DEFAULTS = {
@@ -695,6 +726,32 @@
       entries.forEach((entry, i) => cardsEl.appendChild(renderCard(entry, i)));
     }
 
+    function formatExportBlock(entries) {
+      const row = entries.map(entry => entry.note).join("  ");
+      const title = titleEl.textContent.trim();
+      return title ? `; ${title}\n${row}` : row;
+    }
+
+    function sendToNotesChart(mode) {
+      if (!schema || !svgTemplate) {
+        showStatus("Chart not loaded yet — try again in a moment.", true);
+        return;
+      }
+      const entries = collectEntries();
+      if (!entries.length) {
+        showStatus("No notes match the current filters.", true);
+        return;
+      }
+      hideStatus();
+      window.SAX_CHART_TRANSFER.push({
+        text: formatExportBlock(entries),
+        mode,
+        title: titleEl.textContent.trim(),
+        flats: preferFlatsEl.checked
+      });
+      location.href = "notes-to-chart.html?from=keychart";
+    }
+
     function initControls() {
       PITCHES_FLAT.forEach(name => {
         const option = document.createElement("option");
@@ -726,6 +783,8 @@
         applyUrlState();
         draw();
       });
+      sendNotesReplaceEl.addEventListener("click", () => sendToNotesChart("replace"));
+      sendNotesAppendEl.addEventListener("click", () => sendToNotesChart("append"));
     }
 
     function parseSvgDocument(svgText) {

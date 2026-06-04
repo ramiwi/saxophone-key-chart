@@ -546,6 +546,7 @@
     <span>Rendering…</span>
   </div>
 
+  <script src="chart-transfer.js"></script>
   <script src="schema.js"></script>
   <script src="diagram.js"></script>
   <script>
@@ -1402,14 +1403,48 @@ E4`;
       flash("Loaded from link.");
     });
 
+    function applyKeyChartImport(baseText) {
+      const params = new URLSearchParams(location.search);
+      if (params.get("from") !== "keychart") return baseText;
+
+      const payload = window.SAX_CHART_TRANSFER.pull();
+      const cleanUrl = () => {
+        history.replaceState(null, "", location.pathname + location.hash);
+      };
+
+      if (!payload) {
+        cleanUrl();
+        flash("Nothing received from Key chart — use Send or Append on the chart page.");
+        return baseText;
+      }
+
+      if (payload.flats !== undefined) {
+        setSwitch(preferFlatsEl, !!payload.flats);
+      }
+
+      let text = baseText;
+      if (payload.mode === "append") {
+        const sep = text.trim() ? "\n\n" : "";
+        text = text.trimEnd() + sep + payload.text;
+      } else {
+        text = payload.text;
+      }
+
+      cleanUrl();
+      const label = payload.title ? ` (${payload.title})` : "";
+      flash(`Imported from Key chart${label}.`);
+      return text;
+    }
+
     // ---- Init: link params win, then saved draft, then the built-in sample ----
     const initParams = parseHash();
     applySettingsFromParams(initParams);
     const sharedNotes = initParams.get("notes");
     const draftNotes = loadDraft();
-    inputEl.value = sharedNotes !== null ? sharedNotes
+    let initialNotes = sharedNotes !== null ? sharedNotes
       : draftNotes !== null ? draftNotes
       : SAMPLE;
+    inputEl.value = applyKeyChartImport(initialNotes);
     saveDraft(inputEl.value);
     refreshPresetSelect("");
     syncUrl();
