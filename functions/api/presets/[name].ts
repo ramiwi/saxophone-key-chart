@@ -26,17 +26,22 @@ export const onRequestPut: PagesFunction<Env> = async ({ request, env, params })
   if (!notesText.trim()) return errorResponse("notesText must be a non-empty string.", 400);
   if (notesText.length > 100000) return errorResponse("Preset content too large (max 100000 chars).", 413);
 
-  await db
-    .prepare(
-      `INSERT INTO presets (owner_id, name, notes_text, updated_at)
-       VALUES (?, ?, ?, datetime('now'))
-       ON CONFLICT(owner_id, name)
-       DO UPDATE SET
-         notes_text = excluded.notes_text,
-         updated_at = datetime('now')`
-    )
-    .bind(ownerId, rawName, notesText)
-    .run();
+  try {
+    await db
+      .prepare(
+        `INSERT INTO presets (owner_id, name, notes_text, updated_at)
+         VALUES (?, ?, ?, datetime('now'))
+         ON CONFLICT(owner_id, name)
+         DO UPDATE SET
+           notes_text = excluded.notes_text,
+           updated_at = datetime('now')`
+      )
+      .bind(ownerId, rawName, notesText)
+      .run();
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return errorResponse(`Preset save failed: ${msg}`, 500);
+  }
 
   return jsonResponse({ ok: true, name: rawName });
 };
@@ -51,10 +56,15 @@ export const onRequestDelete: PagesFunction<Env> = async ({ request, env, params
   const rawName = String(params.name || "").trim();
   if (!rawName) return errorResponse("Preset name is required.", 400);
 
-  await db
-    .prepare("DELETE FROM presets WHERE owner_id = ? AND name = ?")
-    .bind(ownerId, rawName)
-    .run();
+  try {
+    await db
+      .prepare("DELETE FROM presets WHERE owner_id = ? AND name = ?")
+      .bind(ownerId, rawName)
+      .run();
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return errorResponse(`Preset delete failed: ${msg}`, 500);
+  }
 
   return jsonResponse({ ok: true, name: rawName });
 };
