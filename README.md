@@ -47,7 +47,7 @@ See `cloudflare-presets-api.md` for exact request/response contract.
 
 `wrangler.toml` must include:
 
-- `pages_build_output_dir = "."`
+- `pages_build_output_dir = "public"`
 - D1 binding named **exactly** `PRESETS_DB`
 
 Current D1 id used in this project:
@@ -77,7 +77,19 @@ Note: helper runs local migration by default. Use explicit `--remote` command fo
 
 ## Deployment notes
 
-Cloudflare Pages auto-detects static assets and uploads `functions/`.
+Build a dedicated frontend folder and deploy it:
+
+```bash
+./scripts/deploy-pages.sh
+```
+
+This script copies the required static files into `public/` and runs:
+
+```bash
+npx wrangler pages deploy public
+```
+
+`functions/` stays at repository root for Cloudflare Pages Functions.
 
 Useful verification URL after deploy:
 
@@ -100,7 +112,7 @@ Expected success payload:
 - `{"error":"... no such table: presets ..."}`
   - remote D1 migration not applied; run migration with `--remote`.
 - Cloudflare log says wrangler config was skipped/invalid
-  - ensure `wrangler.toml` contains `pages_build_output_dir = "."`.
+- ensure `wrangler.toml` contains `pages_build_output_dir = "public"`.
 - `PRESETS_DB binding is missing on this deployment`
   - D1 binding name in Pages project does not match `PRESETS_DB`.
 
