@@ -118,6 +118,7 @@ Delete one preset for current device.
    - `npx wrangler d1 create sax-chart-presets`
 2. Bind it to Pages/Functions as `PRESETS_DB`.
    - If your dashboard generated `sax_chart_presets`, rename that binding to `PRESETS_DB` in config so it matches the functions code.
+   - Ensure `wrangler.toml` includes `pages_build_output_dir = "."` so Pages accepts the file and does not skip bindings.
 3. Apply migration:
    - `npx wrangler d1 execute sax-chart-presets --file=./migrations/0001_presets.sql`
    - or use helper: `./scripts/migrate-d1.sh`

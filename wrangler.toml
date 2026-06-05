@@ -1,5 +1,6 @@
 name = "sax-chart"
 compatibility_date = "2026-06-04"
+pages_build_output_dir = "."
 
 [vars]
 # Optional: set this only if API runs on another origin.

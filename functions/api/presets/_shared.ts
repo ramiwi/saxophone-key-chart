@@ -38,6 +38,12 @@ export function getOwnerId(request: Request): string | null {
   return value;
 }
 
+export function getPresetsDb(env: Partial<Env>): D1Database | null {
+  const db = (env as { PRESETS_DB?: D1Database }).PRESETS_DB;
+  if (!db || typeof db.prepare !== "function") return null;
+  return db;
+}
+
 export function optionsResponse(): Response {
   return new Response(null, {
     status: 204,
