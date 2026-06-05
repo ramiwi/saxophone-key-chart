@@ -125,6 +125,32 @@
       cursor: pointer;
     }
     .lookup-row button:disabled { opacity: 0.55; cursor: wait; }
+    .lookup-feedback {
+      margin: 0;
+      font-size: .75rem;
+      color: var(--muted);
+      min-height: 1.1em;
+    }
+    .lookup-feedback.error { color: #9c2b2b; }
+    .lookup-feedback.busy::before {
+      content: "";
+      display: inline-block;
+      width: .75rem;
+      height: .75rem;
+      margin-right: .4rem;
+      border: 2px solid rgba(0, 0, 0, .18);
+      border-top-color: rgba(0, 0, 0, .55);
+      border-radius: 50%;
+      animation: lookup-spin .65s linear infinite;
+      vertical-align: -0.1em;
+    }
+    @keyframes lookup-spin { to { transform: rotate(360deg); } }
+    @media (prefers-reduced-motion: reduce) {
+      .lookup-feedback.busy::before { animation: none; }
+    }
+    @media (max-width: 640px) {
+      #tuneSearchBtn { display: none; }
+    }
     .lookup-pick {
       display: flex;
       flex-wrap: wrap;
@@ -461,15 +487,27 @@
           <label for="tuneSearch">Look up tune online</label>
           <div class="lookup-row">
             <select id="tuneSource" aria-label="Tune source">
-              <option value="session">The Session (built-in)</option>
-              <option value="tunepal">Tunepal (built-in)</option>
-              <option value="adapter">Catalog adapter (backend)</option>
+              <option value="session" selected>The Session API</option>
+              <option value="tunepal">Tunepal API</option>
+              <option value="musescore">MuseScore (no public REST API)</option>
+              <option value="ireal">iReal Pro links (not note API)</option>
+              <option value="adapter">Custom REST tune API</option>
             </select>
             <input type="url" id="catalogAdapterUrl" placeholder="Adapter base URL (e.g. https://example.com/tunes-api)" hidden />
           </div>
           <div class="lookup-row">
             <input type="search" id="tuneSearch" placeholder="Search The Session (e.g. Morning Dew)" autocomplete="off" />
             <button type="button" id="tuneSearchBtn">Search</button>
+          </div>
+          <p id="tuneSearchState" class="lookup-feedback" role="status" aria-live="polite">
+            Type to search (or press Enter).
+          </p>
+          <div class="lookup-row">
+            <select id="tuneInstrument" aria-label="Target instrument">
+              <option value="concert" selected>Concert (C)</option>
+              <option value="bb">Tenor/Soprano Sax (Bb)</option>
+              <option value="eb">Alto/Bari Sax (Eb)</option>
+            </select>
           </div>
           <div class="lookup-pick" id="tunePick" hidden>
             <select id="tuneResultSelect" aria-label="Search results">
@@ -482,11 +520,12 @@
             <button type="button" id="tuneAppendBtn">Append</button>
           </div>
           <p class="lookup-hint">
-            Searches <a href="https://thesession.org/tunes" target="_blank" rel="noopener">The Session</a> and
-            <a href="https://tunepal.org/" target="_blank" rel="noopener">Tunepal</a>
-            (traditional tune catalogs with ABC notation) and converts melody lines to scientific pitch names.
-            For larger catalogs, switch source to <strong>Catalog adapter</strong> and provide your backend URL.
-            That backend should expose <code>/search</code> and <code>/tunes/:id</code> JSON endpoints.
+            Select one source manually per search. <a href="https://thesession.org/tunes" target="_blank" rel="noopener">The Session</a>
+            and <a href="https://tunepal.org/" target="_blank" rel="noopener">Tunepal</a> are live JSON endpoints.
+            MuseScore and iReal Pro entries are informational because they don't provide a browser-friendly public note REST API.
+            For those catalogs, use <strong>Custom REST tune API</strong> with your own backend/proxy endpoints:
+            <code>/search</code> and <code>/tunes/:id</code>.
+            Imported notes are transposed to your selected instrument (C/Bb/Eb) before rendering sax fingerings.
           </p>
           <div class="lookup-row">
             <input type="file" id="tuneFileInput" accept=".abc,.mid,.midi,.musicxml,.xml" />
@@ -748,6 +787,7 @@ E4`;
     const tuneSearchEl = document.getElementById("tuneSearch");
     const tuneSearchBtn = document.getElementById("tuneSearchBtn");
     const tuneSourceEl = document.getElementById("tuneSource");
+    const tuneInstrumentEl = document.getElementById("tuneInstrument");
     const catalogAdapterUrlEl = document.getElementById("catalogAdapterUrl");
     const tunePickEl = document.getElementById("tunePick");
     const tuneResultSelectEl = document.getElementById("tuneResultSelect");
@@ -757,6 +797,7 @@ E4`;
     const tuneFileInputEl = document.getElementById("tuneFileInput");
     const tuneFileReplaceBtn = document.getElementById("tuneFileReplaceBtn");
     const tuneFileAppendBtn = document.getElementById("tuneFileAppendBtn");
+    const tuneSearchStateEl = document.getElementById("tuneSearchState");
 
     function showStatus(message, isError = false) {
       statusEl.hidden = false;
@@ -814,6 +855,31 @@ E4`;
       const octave = Math.floor(midi / 12) - 1;
       const pc = ((midi % 12) + 12) % 12;
       return pitchNameFromPc(pc, preferFlats) + octave;
+    }
+
+    function selectedTransposeSemitones() {
+      const instrument = tuneInstrumentEl.value;
+      if (instrument === "bb") return 2;   // Concert -> Bb written
+      if (instrument === "eb") return 9;   // Concert -> Eb written
+      return 0;
+    }
+
+    function transposeScientific(note, semitones, preferFlats) {
+      const midi = scientificToMidi(note);
+      if (midi === null) return note;
+      const transposed = midi + semitones;
+      return midiToScientific(transposed, preferFlats);
+    }
+
+    function transposeNoteText(text, semitones, preferFlats) {
+      if (!semitones) return String(text || "");
+      return String(text || "").split("\n").map(line => {
+        if (line.trimStart().startsWith(";")) return line;
+        return line.replace(/\b([A-G](?:#|b)?\d+)\b/g, (token) => {
+          const out = transposeScientific(token, semitones, preferFlats);
+          return parseScientific(out) ? out : token;
+        });
+      }).join("\n");
     }
 
     function normalizePitchName(name, preferFlats) {
@@ -1665,13 +1731,48 @@ E4`;
     let lookupTuneCache = null;
     let lookupSearchResults = [];
     let tunepalSourceIds = null;
+    let tuneSearchDebounceTimer = null;
+    let tuneSearchToken = 0;
+    let lastCompletedTuneSearchKey = "";
 
     function trimAdapterBase(url) {
       return String(url || "").trim().replace(/\/+$/, "");
     }
 
     function selectedTuneSource() {
-      return tuneSourceEl.value === "adapter" ? "adapter" : "session";
+      const source = tuneSourceEl.value;
+      if (source === "adapter" || source === "tunepal" || source === "session" || source === "musescore" || source === "ireal") {
+        return source;
+      }
+      return "session";
+    }
+
+    function setTuneSearchState(message, opts = {}) {
+      if (!tuneSearchStateEl) return;
+      tuneSearchStateEl.textContent = message || "";
+      tuneSearchStateEl.classList.toggle("error", !!opts.error);
+      tuneSearchStateEl.classList.toggle("busy", !!opts.busy);
+    }
+
+    function tuneSearchKeyForQuery(query) {
+      return [
+        selectedTuneSource(),
+        tuneInstrumentEl.value,
+        trimAdapterBase(catalogAdapterUrlEl.value),
+        String(query || "").trim().toLowerCase()
+      ].join("|");
+    }
+
+    function queueTuneSearch() {
+      clearTimeout(tuneSearchDebounceTimer);
+      const raw = tuneSearchEl.value.trim();
+      if (!raw) {
+        setTuneSearchState("Type to search (or press Enter).");
+        return;
+      }
+      tuneSearchDebounceTimer = setTimeout(() => {
+        runTuneSearch({ trigger: "typing" });
+      }, 600);
     }
 
     function updateLookupSourceUi() {
@@ -1681,20 +1782,29 @@ E4`;
         tuneSearchEl.placeholder = "Search adapter catalog (e.g. Autumn Leaves)";
       } else if (selectedTuneSource() === "tunepal") {
         tuneSearchEl.placeholder = "Search Tunepal (e.g. Cooley's Reel)";
+      } else if (selectedTuneSource() === "musescore") {
+        tuneSearchEl.placeholder = "MuseScore search needs a backend/proxy source";
+      } else if (selectedTuneSource() === "ireal") {
+        tuneSearchEl.placeholder = "iReal links are chord charts, not note-line API";
       } else {
         tuneSearchEl.placeholder = "Search The Session (e.g. Morning Dew)";
       }
     }
 
-    function adapterFetchUrl(path, q) {
+    function adapterFetchUrl(path, paramsObj) {
       const base = trimAdapterBase(catalogAdapterUrlEl.value);
       if (!base) {
         throw new Error("Enter your adapter base URL first.");
       }
-      if (q !== undefined) {
-        return `${base}${path}?q=${encodeURIComponent(q)}`;
+      const params = new URLSearchParams();
+      if (paramsObj && typeof paramsObj === "object") {
+        for (const [key, value] of Object.entries(paramsObj)) {
+          if (value === undefined || value === null || value === "") continue;
+          params.set(key, String(value));
+        }
       }
-      return `${base}${path}`;
+      const query = params.toString();
+      return query ? `${base}${path}?${query}` : `${base}${path}`;
     }
 
     function baseNameFromFile(fileName) {
@@ -1702,17 +1812,22 @@ E4`;
     }
 
     function applyImportedText(mode, text, label) {
-      if (!text.trim()) throw new Error("No notes found to import.");
+      const semitones = selectedTransposeSemitones();
+      const prepared = transposeNoteText(text, semitones, preferFlatsEl.checked);
+      if (!prepared.trim()) throw new Error("No notes found to import.");
       if (mode === "append") {
         const sep = inputEl.value.trim() ? "\n\n" : "";
-        inputEl.value = inputEl.value.trimEnd() + sep + text.trim();
+        inputEl.value = inputEl.value.trimEnd() + sep + prepared.trim();
       } else {
-        inputEl.value = text.trim();
+        inputEl.value = prepared.trim();
       }
       saveDraft(inputEl.value);
       scheduleRender();
       syncUrl();
-      flash(label ? `Imported ${label}.` : "Imported notes.");
+      const transposedLabel = semitones
+        ? ` (transposed ${semitones > 0 ? "+" : ""}${semitones} semitones)`
+        : "";
+      flash(label ? `Imported ${label}${transposedLabel}.` : `Imported notes${transposedLabel}.`);
     }
 
     function abcPitchToScientific(pitchObj, preferFlats) {
@@ -1893,7 +2008,10 @@ E4`;
     }
 
     async function searchViaAdapter(q) {
-      const res = await fetch(adapterFetchUrl("/search", q));
+      const res = await fetch(adapterFetchUrl("/search", {
+        q,
+        instrument: tuneInstrumentEl.value
+      }));
       if (!res.ok) throw new Error(`Adapter search failed (${res.status})`);
       const data = await res.json();
       const tunes = (data.tunes || []).map(t => ({
@@ -1941,6 +2059,14 @@ E4`;
       return { tunes, total: tunes.length };
     }
 
+    async function searchViaMusescore() {
+      throw new Error("MuseScore public REST API is not available. Use Custom REST tune API with your backend/proxy.");
+    }
+
+    async function searchViaIreal() {
+      throw new Error("iReal Pro exposes URL protocols for chord charts, not a public note search REST API.");
+    }
+
     async function loadTuneViaSession(id) {
       const res = await fetch(`${SESSION_TUNE_URL}${id}?format=json`);
       if (!res.ok) throw new Error(`Couldn't load tune (${res.status})`);
@@ -1971,7 +2097,9 @@ E4`;
     }
 
     async function loadTuneViaAdapter(id) {
-      const res = await fetch(adapterFetchUrl(`/tunes/${encodeURIComponent(id)}`));
+      const res = await fetch(adapterFetchUrl(`/tunes/${encodeURIComponent(id)}`, {
+        instrument: tuneInstrumentEl.value
+      }));
       if (!res.ok) throw new Error(`Couldn't load adapter tune (${res.status})`);
       const tune = await res.json();
       if (!tune.settings || !tune.settings.length) {
@@ -2031,9 +2159,12 @@ E4`;
         const opt = document.createElement("option");
         opt.value = String(idx + 1);
         const type = t.type ? ` (${t.type})` : "";
-        const sourceLabel = t.source === "adapter" ? " [adapter]" : "";
-        const sourceLabel2 = t.source === "tunepal" ? " [tunepal]" : "";
-        opt.textContent = `${t.name}${type}${sourceLabel}${sourceLabel2}`;
+        const sourceLabel = t.source === "adapter"
+          ? " [custom]"
+          : t.source === "tunepal"
+            ? " [tunepal]"
+            : " [session]";
+        opt.textContent = `${t.name}${type}${sourceLabel}`;
         tuneResultSelectEl.appendChild(opt);
       });
       lookupTuneCache = null;
@@ -2041,28 +2172,62 @@ E4`;
       tunePickEl.hidden = false;
     }
 
-    async function runTuneSearch() {
+    async function runTuneSearch({ trigger = "manual" } = {}) {
       const q = tuneSearchEl.value.trim();
       if (!q) {
-        flash("Enter a tune name to search.");
+        if (trigger === "manual") {
+          flash("Enter a tune name to search.");
+          setTuneSearchState("Enter a tune name.");
+        } else {
+          setTuneSearchState("Type to search (or press Enter).");
+        }
         tuneSearchEl.focus();
         return;
       }
+      if (trigger === "typing" && q.length < 2) {
+        setTuneSearchState("Keep typing to search…");
+        return;
+      }
+      const thisSearchKey = tuneSearchKeyForQuery(q);
+      if (trigger === "typing" && thisSearchKey === lastCompletedTuneSearchKey) {
+        return;
+      }
+      const myToken = ++tuneSearchToken;
       tuneSearchBtn.disabled = true;
+      tuneSearchEl.setAttribute("aria-busy", "true");
+      setTuneSearchState(`Searching for "${q}"…`, { busy: true });
       try {
-        const searchResult = selectedTuneSource() === "adapter"
+        const source = selectedTuneSource();
+        const searchResult = source === "adapter"
           ? await searchViaAdapter(q)
-          : selectedTuneSource() === "tunepal"
+          : source === "tunepal"
             ? await searchViaTunepal(q)
-            : await searchViaSession(q);
+            : source === "session"
+              ? await searchViaSession(q)
+              : source === "musescore"
+                ? await searchViaMusescore(q)
+                : await searchViaIreal(q);
+        if (myToken !== tuneSearchToken) return;
         const tunes = searchResult.tunes || [];
         populateTuneSearchResults(tunes);
-        if (!tunes.length) flash(`No tunes found for “${q}”.`);
-        else flash(`${searchResult.total ?? tunes.length} match(es) — pick one below.`);
+        lastCompletedTuneSearchKey = thisSearchKey;
+        if (!tunes.length) {
+          flash(`No tunes found for “${q}”.`);
+          setTuneSearchState(`No matches for "${q}".`);
+        } else {
+          const total = searchResult.total ?? tunes.length;
+          flash(`${total} match(es) — pick one below.`);
+          setTuneSearchState(`${total} match(es) for "${q}" — pick one below.`);
+        }
       } catch (err) {
+        if (myToken !== tuneSearchToken) return;
         flash(err.message || "Tune search failed.");
+        setTuneSearchState(err.message || "Tune search failed.", { error: true });
       } finally {
-        tuneSearchBtn.disabled = false;
+        if (myToken === tuneSearchToken) {
+          tuneSearchBtn.disabled = false;
+          tuneSearchEl.removeAttribute("aria-busy");
+        }
       }
     }
 
@@ -2076,13 +2241,24 @@ E4`;
       tunePickEl.hidden = true;
       lookupTuneCache = null;
       lookupSearchResults = [];
+      lastCompletedTuneSearchKey = "";
+      if (tuneSearchEl.value.trim()) queueTuneSearch();
     });
     catalogAdapterUrlEl.addEventListener("change", () => {
       localStorage.setItem(ADAPTER_URL_KEY, trimAdapterBase(catalogAdapterUrlEl.value));
     });
-    tuneSearchBtn.addEventListener("click", runTuneSearch);
+    tuneSearchBtn.addEventListener("click", () => runTuneSearch({ trigger: "manual" }));
+    tuneSearchEl.addEventListener("input", queueTuneSearch);
     tuneSearchEl.addEventListener("keydown", (e) => {
-      if (e.key === "Enter") { e.preventDefault(); runTuneSearch(); }
+      if (e.key === "Enter") {
+        e.preventDefault();
+        clearTimeout(tuneSearchDebounceTimer);
+        runTuneSearch({ trigger: "manual" });
+      }
+    });
+    tuneInstrumentEl.addEventListener("change", () => {
+      lastCompletedTuneSearchKey = "";
+      if (tuneSearchEl.value.trim()) queueTuneSearch();
     });
     tuneResultSelectEl.addEventListener("change", async () => {
       const idx = Number(tuneResultSelectEl.value) - 1;
