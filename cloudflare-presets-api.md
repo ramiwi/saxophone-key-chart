@@ -129,3 +129,23 @@ Delete one preset for current device.
 - `Local only`: reads/writes only `localStorage`.
 - `Cloud sync`: reads/writes only API.
 - `Local + cloud backup`: local is immediate source; cloud mirrors on save/delete and contributes entries on load.
+
+## Troubleshooting (production)
+
+- `Error 1101 Worker threw exception`
+  - Check Cloudflare Workers logs for the exact exception.
+  - Current handlers should return JSON errors instead of crashing for most D1 failures.
+
+- `{"error":"Preset query failed: D1_ERROR: no such table: presets: SQLITE_ERROR"}`
+  - Migration was run only on local D1.
+  - Run again on remote:
+    - `npx wrangler d1 execute sax-chart-presets --remote --file=./migrations/0001_presets.sql`
+
+- `{"error":"PRESETS_DB binding is missing on this deployment."}`
+  - Pages project binding name does not match code.
+  - Ensure D1 binding name is exactly `PRESETS_DB`.
+
+- Cloudflare build warning says wrangler config is invalid/skipped
+  - Ensure `wrangler.toml` has:
+    - `pages_build_output_dir = "."`
+  - If this is missing, Pages may skip binding config and runtime can fail.
