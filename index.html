@@ -416,18 +416,73 @@
       flats: "1",
       dark: "1"
     };
+    const STORAGE_KEY = "sax_chart.index.state.v1";
+    const STORAGE_AREAS = ["localStorage", "sessionStorage"];
+
+    function parseStoredState(raw) {
+      if (!raw) return null;
+      try {
+        const parsed = JSON.parse(raw);
+        return parsed && typeof parsed === "object" ? parsed : null;
+      } catch {
+        return null;
+      }
+    }
+
+    function readStoredState() {
+      for (const areaName of STORAGE_AREAS) {
+        try {
+          const area = window[areaName];
+          const state = parseStoredState(area.getItem(STORAGE_KEY));
+          if (state) return state;
+        } catch {
+          // Ignore blocked or unavailable storage area.
+        }
+      }
+      return null;
+    }
+
+    function writeStoredState(state) {
+      const text = JSON.stringify(state);
+      for (const areaName of STORAGE_AREAS) {
+        try {
+          const area = window[areaName];
+          area.setItem(STORAGE_KEY, text);
+        } catch {
+          // Ignore blocked or unavailable storage area.
+        }
+      }
+    }
 
     function readUrlState() {
       const params = new URLSearchParams(location.search);
-      return {
-        mode: params.get("mode") || URL_DEFAULTS.mode,
-        root: params.get("root") || URL_DEFAULTS.root,
-        scale: params.get("scale") || URL_DEFAULTS.scale,
-        octaves: params.get("octaves") || URL_DEFAULTS.octaves,
-        register: params.get("register") || URL_DEFAULTS.register,
-        flats: params.get("flats") || URL_DEFAULTS.flats,
-        dark: params.get("dark") || URL_DEFAULTS.dark
+      const stored = readStoredState() || {};
+      const resolved = {
+        mode: params.get("mode") || stored.mode || URL_DEFAULTS.mode,
+        root: params.get("root") || stored.root || URL_DEFAULTS.root,
+        scale: params.get("scale") || stored.scale || URL_DEFAULTS.scale,
+        octaves: params.get("octaves") || stored.octaves || URL_DEFAULTS.octaves,
+        register: params.get("register") || stored.register || URL_DEFAULTS.register,
+        flats: params.get("flats") || stored.flats || URL_DEFAULTS.flats,
+        dark: params.get("dark") || stored.dark || URL_DEFAULTS.dark
       };
+
+      // If URL contains only defaults (often from an old navigation entry),
+      // prefer last explicit user selection from storage.
+      const hasUrlParams = Array.from(params.keys()).length > 0;
+      const resolvedIsAllDefaults = Object.entries(URL_DEFAULTS).every(([key, value]) => resolved[key] === value);
+      if (hasUrlParams && resolvedIsAllDefaults && Object.keys(stored).length > 0) {
+        return {
+          mode: stored.mode || URL_DEFAULTS.mode,
+          root: stored.root || URL_DEFAULTS.root,
+          scale: stored.scale || URL_DEFAULTS.scale,
+          octaves: stored.octaves || URL_DEFAULTS.octaves,
+          register: stored.register || URL_DEFAULTS.register,
+          flats: stored.flats || URL_DEFAULTS.flats,
+          dark: stored.dark || URL_DEFAULTS.dark
+        };
+      }
+      return resolved;
     }
 
     function applyPressedTheme() {
@@ -458,7 +513,7 @@
     }
 
     function syncUrlState() {
-      const params = new URLSearchParams({
+      const state = {
         mode: modeEl.value,
         root: rootEl.value,
         scale: scaleEl.value,
@@ -466,11 +521,15 @@
         register: registerEl.value,
         flats: preferFlatsEl.checked ? "1" : "0",
         dark: darkPressedEl.checked ? "1" : "0"
-      });
+      };
+      const params = new URLSearchParams(state);
+      writeStoredState(state);
       history.replaceState(null, "", `${location.pathname}?${params.toString()}`);
     }
 
     function onControlsChange() {
+      // Persist immediately, even if assets are still loading.
+      syncUrlState();
       applyPressedTheme();
       draw();
     }
@@ -743,6 +802,7 @@
         showStatus("Chart not loaded yet — try again in a moment.", true);
         return;
       }
+      syncUrlState();
       const entries = collectEntries();
       if (!entries.length) {
         showStatus("No notes match the current filters.", true);
@@ -856,6 +916,7 @@
 
     initControls();
     applyUrlState();
+    syncUrlState();
     bindControls();
     loadAssets();
   </script>
