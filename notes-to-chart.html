@@ -20,6 +20,41 @@
   <!-- MIDI parser for local .mid/.midi import. -->
   <script src="https://cdn.jsdelivr.net/npm/@tonejs/midi@2.0.28/build/Midi.min.js" defer></script>
   <style>
+    /* Collapsible disclosure panels (search, formatting help, settings). */
+    .editor { margin-bottom: 14px; }
+    .editor textarea { min-height: 280px; }
+    .disclosure {
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: #fafafa;
+      margin-bottom: 12px;
+    }
+    .disclosure > summary {
+      cursor: pointer;
+      list-style: none;
+      padding: 10px 12px;
+      font-size: .85rem;
+      font-weight: 600;
+      color: var(--ink);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .disclosure > summary::-webkit-details-marker { display: none; }
+    .disclosure > summary::before { content: "▸"; color: var(--accent); font-size: .8em; }
+    .disclosure[open] > summary::before { content: "▾"; }
+    .disclosure > summary:hover { color: var(--accent); }
+    .disclosure .disclosure-body { padding: 0 12px 12px; }
+    .disclosure .settings { margin-bottom: 0; }
+    /* Emphasize the primary actions. */
+    .toolbar button#savePresetBtn {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #fff;
+    }
+    .toolbar button#savePresetBtn:hover { filter: brightness(.94); border-color: var(--accent); }
+    .toolbar button#renderBtn { border-color: var(--accent); color: var(--accent); font-weight: 600; }
+
     :root {
       --bg: #ffffff;
       --ink: #000000;
@@ -496,17 +531,15 @@
     <p class="eyebrow">Alto · Tenor · Soprano · Baritone</p>
     <h1>Notes <em>→</em> key charts</h1>
     <p class="sub">
-      Paste space-separated note rows (e.g. <code>B4           C5</code>). Notes are aligned into shared
-      columns by their character position, so the same column lines up vertically across rows.
-      Same diagrams as <a href="index.html">the key chart</a>.
+      Type or paste note rows below — or look up a tune. Same diagrams as <a href="index.html">the key chart</a>.
     </p>
 
     <div id="status" class="status" hidden></div>
 
-    <div class="panel no-print">
-      <div>
-        <div class="tune-lookup">
-          <label for="tuneSearch">Look up tune online</label>
+    <div class="editor no-print">
+      <details class="disclosure" data-remember="n2c.lookup.open">
+        <summary>Look up a tune online or import a file</summary>
+        <div class="disclosure-body">
           <div class="lookup-row">
             <select id="tuneSource" aria-label="Tune source">
               <option value="session" selected>The Session API</option>
@@ -555,23 +588,31 @@
             <button type="button" id="tuneFileAppendBtn">Import file (append)</button>
           </div>
         </div>
-        <label for="input">Note lines (one row per line)</label>
-        <textarea id="input" spellcheck="false" placeholder="B3   B4 B4           C5"></textarea>
-      </div>
-      <div>
-        <p class="sub" style="margin-top:0">
-          Notes use scientific pitch: letter, optional <code>#</code> or <code>b</code>, octave (e.g. <code>A#4</code>).
-          Notes that start at the same character position align into the same column down the page —
-          add or remove leading spaces to line things up. Commas are treated like spaces. Empty lines are skipped.
-          A line starting with <code>;</code> is a title for the next row (e.g. <code>; Song 1</code>),
-          shown next to its row number.
-          With <strong>Diagrams per row</strong> set, each row uses that fixed number of equal-size
-          columns and wraps any overflow onto new lines; clear it to align notes by character position instead.
-        </p>
-      </div>
+      </details>
+
+      <label for="input">Note lines (one row per line)</label>
+      <textarea id="input" spellcheck="false" placeholder="B3   B4 B4           C5"></textarea>
+
+      <details class="disclosure" data-remember="n2c.format.open">
+        <summary>Formatting &amp; alignment help</summary>
+        <div class="disclosure-body">
+          <p class="sub" style="margin:0">
+            Notes use scientific pitch: letter, optional <code>#</code> or <code>b</code>, octave (e.g. <code>A#4</code>).
+            Notes that start at the same character position align into the same column down the page —
+            add or remove leading spaces to line things up. Commas are treated like spaces. Empty lines are skipped.
+            A line starting with <code>;</code> is a title for the next row (e.g. <code>; Song 1</code>),
+            shown next to its row number.
+            With <strong>Diagrams per row</strong> set, each row uses that fixed number of equal-size
+            columns and wraps any overflow onto new lines; clear it to align notes by character position instead.
+          </p>
+        </div>
+      </details>
     </div>
 
-    <div class="settings no-print">
+    <details class="disclosure no-print" data-remember="n2c.settings.open">
+      <summary>Layout &amp; display settings</summary>
+      <div class="disclosure-body">
+        <div class="settings">
       <fieldset class="group">
         <legend>Notation</legend>
         <div class="switch-field">
@@ -677,7 +718,9 @@
           <wa-switch id="tightRows">No row padding/border</wa-switch>
         </div>
       </fieldset>
-    </div>
+        </div>
+      </div>
+    </details>
 
     <div class="toolbar actions no-print">
       <button type="button" id="renderBtn" data-ui-icon="refresh">Update diagrams</button>
@@ -2427,6 +2470,22 @@ E4`;
     if (showStaffEl.checked) {
       window.addEventListener("load", () => { if (window.Vex) renderRows(); }, { once: true });
     }
+  </script>
+  <script>
+    // Remember open/closed state of the collapsible panels across visits.
+    (function () {
+      document.querySelectorAll("details[data-remember]").forEach((panel) => {
+        const key = panel.getAttribute("data-remember");
+        try {
+          const saved = localStorage.getItem(key);
+          if (saved === "1") panel.open = true;
+          else if (saved === "0") panel.open = false;
+        } catch (e) { /* storage unavailable */ }
+        panel.addEventListener("toggle", () => {
+          try { localStorage.setItem(key, panel.open ? "1" : "0"); } catch (e) { /* noop */ }
+        });
+      });
+    })();
   </script>
 </body>
 </html>

@@ -24,12 +24,14 @@
       color: var(--muted, #444);
       background: #fff;
     }
-    .site-nav a:hover { border-color: var(--ink, #000); color: var(--ink, #000); }
+    .site-nav a:hover { border-color: var(--accent, #a87a16); color: var(--accent, #a87a16); }
     .site-nav a[aria-current="page"] {
-      color: var(--ink, #000);
-      border-color: var(--ink, #000);
+      color: #fff;
+      background: var(--accent, #a87a16);
+      border-color: var(--accent, #a87a16);
       font-weight: 600;
     }
+    .site-nav a[aria-current="page"]:hover { color: #fff; }
     @media print { .site-nav { display: none !important; } }
   `;
   document.head.appendChild(style);
