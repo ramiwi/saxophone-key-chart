@@ -1639,8 +1639,8 @@ E4`;
       presetSelectEl.value = selectedName && presets[selectedName] !== undefined ? selectedName : "";
     }
 
-    // ---- All UI settings are persisted in the URL hash as query params ----
-    // Each switch is stored as a "1"/"0" flag under a short key.
+    // ---- All UI settings are persisted in URL + storage ----
+    // URL hash keeps links shareable; storage keeps last-used defaults.
     const BOOL_SETTINGS = {
       flats: preferFlatsEl,
       dark: darkPressedEl,
@@ -1654,6 +1654,80 @@ E4`;
       nobord: noCardBorderEl,
       staff: showStaffEl
     };
+    const SETTINGS_DEFAULTS = {
+      flats: "1",
+      dark: "1",
+      live: "1",
+      empty: "0",
+      noalt: "0",
+      nopalm: "0",
+      tight: "0",
+      nocap: "0",
+      noinfo: "0",
+      nobord: "0",
+      staff: "0",
+      size: "1",
+      per: "10",
+      gap: "8",
+      rgap: "16",
+      nsize: "16",
+      tgap: "8",
+      pmar: "16",
+      def: ""
+    };
+    const SETTINGS_STORAGE_KEY = "sax_chart.notes_to_chart.settings.v1";
+    const SETTINGS_STORAGE_AREAS = ["localStorage", "sessionStorage"];
+
+    function parseStoredSettings(raw) {
+      if (!raw) return null;
+      try {
+        const parsed = JSON.parse(raw);
+        return parsed && typeof parsed === "object" ? parsed : null;
+      } catch {
+        return null;
+      }
+    }
+
+    function readStoredSettings() {
+      for (const areaName of SETTINGS_STORAGE_AREAS) {
+        try {
+          const area = window[areaName];
+          const state = parseStoredSettings(area.getItem(SETTINGS_STORAGE_KEY));
+          if (state) return state;
+        } catch {
+          // Ignore blocked or unavailable storage area.
+        }
+      }
+      return null;
+    }
+
+    function writeStoredSettings(state) {
+      const text = JSON.stringify(state);
+      for (const areaName of SETTINGS_STORAGE_AREAS) {
+        try {
+          const area = window[areaName];
+          area.setItem(SETTINGS_STORAGE_KEY, text);
+        } catch {
+          // Ignore blocked or unavailable storage area.
+        }
+      }
+    }
+
+    function collectSettingsState() {
+      const state = {};
+      for (const [key, el] of Object.entries(BOOL_SETTINGS)) {
+        state[key] = el.checked ? "1" : "0";
+      }
+      state.size = sizeScaleEl.value;
+      state.per = perRowEl.value;
+      state.gap = colGapEl.value;
+      state.rgap = rowGapEl.value;
+      state.nsize = noteSizeEl.value;
+      state.tgap = titleGapEl.value;
+      state.pmar = pageMarginEl.value;
+      state.def = defaultFingeringEl.value.trim();
+      return state;
+    }
 
     function setSwitch(el, on) {
       el.checked = on;
@@ -1663,18 +1737,18 @@ E4`;
     function buildHash(text) {
       const p = new URLSearchParams();
       if (text) p.set("notes", text);
-      for (const [key, el] of Object.entries(BOOL_SETTINGS)) {
-        p.set(key, el.checked ? "1" : "0");
+      const state = collectSettingsState();
+      for (const key of Object.keys(BOOL_SETTINGS)) {
+        p.set(key, state[key] || SETTINGS_DEFAULTS[key]);
       }
-      p.set("size", sizeScaleEl.value);
-      p.set("per", perRowEl.value);
-      p.set("gap", colGapEl.value);
-      p.set("rgap", rowGapEl.value);
-      p.set("nsize", noteSizeEl.value);
-      p.set("tgap", titleGapEl.value);
-      p.set("pmar", pageMarginEl.value);
-      const def = defaultFingeringEl.value.trim();
-      if (def) p.set("def", def);
+      p.set("size", state.size || SETTINGS_DEFAULTS.size);
+      p.set("per", state.per || SETTINGS_DEFAULTS.per);
+      p.set("gap", state.gap || SETTINGS_DEFAULTS.gap);
+      p.set("rgap", state.rgap || SETTINGS_DEFAULTS.rgap);
+      p.set("nsize", state.nsize || SETTINGS_DEFAULTS.nsize);
+      p.set("tgap", state.tgap || SETTINGS_DEFAULTS.tgap);
+      p.set("pmar", state.pmar || SETTINGS_DEFAULTS.pmar);
+      if (state.def) p.set("def", state.def);
       return "#" + p.toString();
     }
 
@@ -1682,22 +1756,25 @@ E4`;
       return new URLSearchParams(location.hash.replace(/^#/, ""));
     }
 
-    function applySettingsFromParams(p) {
+    function applySettingsFromParams(p, stored = null) {
+      const fallback = stored || {};
       for (const [key, el] of Object.entries(BOOL_SETTINGS)) {
-        if (p.has(key)) setSwitch(el, p.get(key) === "1");
+        const raw = p.has(key) ? p.get(key) : (fallback[key] ?? SETTINGS_DEFAULTS[key]);
+        if (raw === "0" || raw === "1") setSwitch(el, raw === "1");
       }
-      if (p.has("size")) sizeScaleEl.value = p.get("size");
-      if (p.has("per")) perRowEl.value = p.get("per");
-      if (p.has("gap")) colGapEl.value = p.get("gap");
-      if (p.has("rgap")) rowGapEl.value = p.get("rgap");
-      if (p.has("nsize")) noteSizeEl.value = p.get("nsize");
-      if (p.has("tgap")) titleGapEl.value = p.get("tgap");
-      if (p.has("pmar")) pageMarginEl.value = p.get("pmar");
-      if (p.has("def")) defaultFingeringEl.value = p.get("def");
+      sizeScaleEl.value = p.get("size") || fallback.size || SETTINGS_DEFAULTS.size;
+      perRowEl.value = p.get("per") || fallback.per || SETTINGS_DEFAULTS.per;
+      colGapEl.value = p.get("gap") || fallback.gap || SETTINGS_DEFAULTS.gap;
+      rowGapEl.value = p.get("rgap") || fallback.rgap || SETTINGS_DEFAULTS.rgap;
+      noteSizeEl.value = p.get("nsize") || fallback.nsize || SETTINGS_DEFAULTS.nsize;
+      titleGapEl.value = p.get("tgap") || fallback.tgap || SETTINGS_DEFAULTS.tgap;
+      pageMarginEl.value = p.get("pmar") || fallback.pmar || SETTINGS_DEFAULTS.pmar;
+      defaultFingeringEl.value = p.get("def") || fallback.def || SETTINGS_DEFAULTS.def;
     }
 
     // Reflect the current notes + settings into the address bar (no history spam).
     function syncUrl() {
+      writeStoredSettings(collectSettingsState());
       history.replaceState(null, "", buildHash(inputEl.value));
     }
 
@@ -2422,7 +2499,8 @@ E4`;
 
     // ---- Init: link params win, then saved draft, then the built-in sample ----
     const initParams = parseHash();
-    applySettingsFromParams(initParams);
+    const storedSettings = readStoredSettings();
+    applySettingsFromParams(initParams, storedSettings);
     const sharedNotes = initParams.get("notes");
     const draftNotes = loadDraft();
     let initialNotes = sharedNotes !== null ? sharedNotes
