@@ -14,24 +14,31 @@
 
   const style = document.createElement("style");
   style.textContent = `
-    .site-nav { display: flex; gap: 8px; flex-wrap: wrap; margin: 0 0 16px; }
-    .site-nav a {
-      padding: 6px 12px;
+    .site-nav {
+      display: inline-flex;
+      margin: 0 0 16px;
       border: 1px solid var(--line, #bbb);
       border-radius: 999px;
+      background: #fff;
+      overflow: hidden;
+    }
+    .site-nav a {
+      padding: 6px 16px;
       font-size: .85rem;
       text-decoration: none;
       color: var(--muted, #444);
-      background: #fff;
+      background: transparent;
     }
-    .site-nav a:hover { border-color: var(--accent, #a87a16); color: var(--accent, #a87a16); }
+    .site-nav a + a { border-left: 1px solid var(--line, #bbb); }
+    .site-nav a:hover { color: var(--accent, #a87a16); }
     .site-nav a[aria-current="page"] {
       color: #fff;
       background: var(--accent, #a87a16);
-      border-color: var(--accent, #a87a16);
       font-weight: 600;
     }
     .site-nav a[aria-current="page"]:hover { color: #fff; }
+    .site-nav a[aria-current="page"] + a,
+    .site-nav a:has(+ a[aria-current="page"]) { border-left-color: transparent; }
     @media print { .site-nav { display: none !important; } }
   `;
   document.head.appendChild(style);
