@@ -1551,6 +1551,15 @@ E4`;
       }
     }
 
+    function presetNameForDisplay(name) {
+      if (typeof name !== "string" || !/%[0-9A-Fa-f]{2}/.test(name)) return name;
+      try {
+        return decodeURIComponent(name);
+      } catch (e) {
+        return name;
+      }
+    }
+
     async function refreshPresetSelect(selectedName) {
       const mode = presetStoreModeEl.value || DEFAULT_PRESET_MODE;
       const localPresets = loadLocalPresets();
@@ -1581,7 +1590,7 @@ E4`;
       for (const name of names) {
         const opt = document.createElement("option");
         opt.value = name;
-        opt.textContent = name;
+        opt.textContent = presetNameForDisplay(name);
         presetSelectEl.appendChild(opt);
       }
       presetSelectEl.value = selectedName && presets[selectedName] !== undefined ? selectedName : "";
