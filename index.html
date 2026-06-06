@@ -18,6 +18,8 @@
       --ink: #000000;
       --muted: #444444;
       --line: #bbbbbb;
+      --accent: #a87a16;
+      --accent-fill: #f3e7c8;
       --key-pressed: #cccccc;
       --key-pressed-stroke: #000000;
       --key-pressed-label: #000000;
@@ -39,8 +41,25 @@
       margin: 20px auto;
       padding: 16px;
     }
-    h1 { margin: 0 0 8px; font-size: 1.35rem; font-weight: 700; }
-    .sub { margin: 0 0 14px; color: var(--muted); font-size: .9rem; }
+    .eyebrow {
+      margin: 0 0 8px;
+      font-size: .7rem;
+      letter-spacing: .18em;
+      text-transform: uppercase;
+      font-weight: 600;
+      color: var(--accent);
+    }
+    h1 {
+      margin: 0 0 10px;
+      font-size: clamp(1.8rem, 4vw, 2.6rem);
+      font-weight: 800;
+      line-height: 1.05;
+      letter-spacing: -0.01em;
+    }
+    h1 em { font-style: italic; font-weight: 600; color: var(--accent); }
+    .sub { margin: 0 0 6px; color: var(--ink); font-size: .98rem; max-width: 62ch; }
+    .sub b { font-weight: 600; }
+    .dev-note { margin: 0 0 16px; color: var(--muted); font-size: .8rem; }
     .controls {
       display: grid;
       grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
@@ -230,8 +249,12 @@
       .wrap { max-width: none; margin: 0; padding: 0; }
       .no-print,
       .controls,
+      .root-row,
+      .help,
       .export-bar,
       .status,
+      .eyebrow,
+      .dev-note,
       .sub { display: none !important; }
       .legend {
         margin: 0 0 8px;
@@ -286,15 +309,72 @@
         fill: var(--key-pressed-label) !important;
       }
       .caption { font-size: 7pt; color: #333; }
+      .card { animation: none !important; }
+    }
+
+    /* ---------- Root pills ---------- */
+    .root-row { margin-bottom: 12px; }
+    .block-label { display: block; font-size: .8rem; color: var(--muted); margin-bottom: 6px; }
+    .roots { display: flex; flex-wrap: wrap; gap: 6px; }
+    .root-btn {
+      font: inherit;
+      font-weight: 600;
+      min-width: 46px;
+      padding: 8px 10px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+      color: var(--ink);
+      cursor: pointer;
+      transition: transform .12s ease, background .16s ease, border-color .16s ease, color .16s ease;
+    }
+    .root-btn:hover { border-color: var(--accent); color: var(--accent); transform: translateY(-1px); }
+    .root-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    .root-btn[aria-pressed="true"] {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #fff;
+    }
+    .roots.disabled { opacity: .4; pointer-events: none; }
+
+    /* ---------- Help / legend ---------- */
+    .help { margin: 2px 0 16px; font-size: .85rem; color: var(--muted); }
+    .help > summary { cursor: pointer; color: var(--accent); font-weight: 600; list-style: none; }
+    .help > summary::-webkit-details-marker { display: none; }
+    .help > summary::before { content: "▸ "; }
+    .help[open] > summary::before { content: "▾ "; }
+    .help-body { padding: 8px 0 0; max-width: 72ch; line-height: 1.5; }
+    .help-body p { margin: 0 0 8px; }
+    .help-body .dot { margin-right: 4px; }
+
+    /* ---------- Card accents + motion ---------- */
+    .note-main strong .acc { color: var(--accent); }
+    .note-main strong .oct { color: var(--muted); font-weight: 400; font-size: .85em; margin-left: 1px; }
+    .card { transition: transform .16s ease, border-color .16s ease, box-shadow .16s ease; }
+    .card:hover {
+      transform: translateY(-3px);
+      border-color: var(--accent);
+      box-shadow: 0 12px 26px -18px rgba(0, 0, 0, .45);
+    }
+    @media (prefers-reduced-motion: no-preference) {
+      .card { animation: card-rise .45s cubic-bezier(.2, .7, .2, 1) backwards; }
+      @keyframes card-rise { from { opacity: 0; transform: translateY(10px); } }
     }
   </style>
 </head>
 <body>
   <div class="wrap">
-    <h1>Saxophone Key Chart</h1>
-    <p class="sub">Works offline — open <code>index.html</code> directly. Edit the JSON/SVG sources, then run <code>node sync-assets.mjs</code>.</p>
+    <p class="eyebrow">Alto · Tenor · Soprano · Baritone</p>
+    <h1>Saxophone <em>Key</em> Chart</h1>
+    <p class="sub">Pick a <b>root</b> and a <b>scale</b> — every note renders as a key diagram. Fingerings are for <b>written</b> notes and are identical across the whole sax family; only the sounding (concert) pitch differs by instrument.</p>
+    <p class="dev-note">Works offline — open <code>index.html</code> directly. Edit the JSON/SVG sources, then run <code>node sync-assets.mjs</code>.</p>
 
     <div id="status" class="status" hidden></div>
+
+    <div class="root-row">
+      <span class="block-label" id="rootLabel">Root</span>
+      <div id="roots" class="roots" role="group" aria-labelledby="rootLabel"></div>
+    </div>
 
     <div class="controls">
       <div>
@@ -303,10 +383,6 @@
           <option value="scale">Scale</option>
           <option value="chromatic">Full chromatic (schema range)</option>
         </select>
-      </div>
-      <div>
-        <label for="root">Root</label>
-        <select id="root"></select>
       </div>
       <div>
         <label for="scale">Scale</label>
@@ -340,6 +416,16 @@
       <span><span class="dot"></span>Open</span>
       <span id="schemaInfo"></span>
     </div>
+
+    <details class="help no-print">
+      <summary>How to read a diagram</summary>
+      <div class="help-body">
+        <p><span class="dot p"></span>filled = key pressed &nbsp; <span class="dot"></span>open = key up.</p>
+        <p>Each card shows the standard saxophone fingering for that note. Fingerings are the same for every saxophone — alto, tenor, soprano, baritone — only the sounding (concert) pitch differs by instrument.</p>
+        <p>The large keys are the main keys: left hand on top, right hand below. The octave key (left thumb) raises the note an octave. The smaller side and palm keys add the highest notes, and the pinky keys reach the lowest.</p>
+        <p>When a note has more than one common fingering, a dropdown appears on its card — switch it to see each option.</p>
+      </div>
+    </details>
 
     <div id="title" class="scale-title"></div>
     <div class="export-bar no-print">
@@ -394,7 +480,7 @@
 
     const statusEl = document.getElementById("status");
     const modeEl = document.getElementById("mode");
-    const rootEl = document.getElementById("root");
+    const rootsEl = document.getElementById("roots");
     const scaleEl = document.getElementById("scale");
     const octavesEl = document.getElementById("octaves");
     const registerEl = document.getElementById("register");
@@ -405,6 +491,34 @@
     const schemaInfoEl = document.getElementById("schemaInfo");
     const sendNotesReplaceEl = document.getElementById("sendNotesReplace");
     const sendNotesAppendEl = document.getElementById("sendNotesAppend");
+
+    let selectedRoot = "C";
+
+    function setRoot(name) {
+      if (PC_INDEX[name] === undefined) return;
+      selectedRoot = name;
+      rootsEl.querySelectorAll(".root-btn").forEach(btn => {
+        btn.setAttribute("aria-pressed", String(btn.dataset.root === name));
+      });
+    }
+
+    function buildRootPills() {
+      rootsEl.replaceChildren();
+      PITCHES_FLAT.forEach(name => {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "root-btn";
+        btn.dataset.root = name;
+        btn.textContent = name;
+        btn.setAttribute("aria-pressed", String(name === selectedRoot));
+        btn.addEventListener("click", () => {
+          if (rootsEl.classList.contains("disabled")) return;
+          setRoot(name);
+          onControlsChange();
+        });
+        rootsEl.appendChild(btn);
+      });
+    }
 
     const VALID_REGISTERS = new Set(["all", "low", "main", "middle", "upper", "palm"]);
     const URL_DEFAULTS = {
@@ -496,7 +610,7 @@
         modeEl.value = state.mode;
       }
       if (PC_INDEX[state.root] !== undefined) {
-        rootEl.value = state.root;
+        setRoot(state.root);
       }
       if (SCALE_PATTERNS[state.scale]) {
         scaleEl.value = state.scale;
@@ -515,7 +629,7 @@
     function syncUrlState() {
       const state = {
         mode: modeEl.value,
-        root: rootEl.value,
+        root: selectedRoot,
         scale: scaleEl.value,
         octaves: String(Math.max(1, Math.min(3, Number(octavesEl.value) || 1))),
         register: registerEl.value,
@@ -677,7 +791,7 @@
         return schema.fingerings.filter(entry => registerMatches(entry, registerFilter));
       }
 
-      const root = rootEl.value;
+      const root = selectedRoot;
       const scale = scaleEl.value;
       const octaves = Math.max(1, Math.min(3, Number(octavesEl.value) || 1));
       const midis = buildScaleMidis(root, scale, octaves);
@@ -699,6 +813,7 @@
       const options = getFingeringOptions(entry);
       const card = document.createElement("article");
       card.className = "card";
+      card.style.animationDelay = `${Math.min(index, 20) * 35}ms`;
 
       const noteHeader = document.createElement("div");
       noteHeader.className = "note";
@@ -707,7 +822,23 @@
       noteMain.className = "note-main";
 
       const strong = document.createElement("strong");
-      strong.textContent = entry.note;
+      const noteMatch = entry.note.match(/^([A-G])(#|b)?(\d+)$/);
+      if (noteMatch) {
+        const [, letter, acc, octave] = noteMatch;
+        strong.append(document.createTextNode(letter));
+        if (acc) {
+          const accSpan = document.createElement("span");
+          accSpan.className = "acc";
+          accSpan.textContent = acc === "b" ? "♭" : "♯";
+          strong.appendChild(accSpan);
+        }
+        const octSpan = document.createElement("span");
+        octSpan.className = "oct";
+        octSpan.textContent = octave;
+        strong.appendChild(octSpan);
+      } else {
+        strong.textContent = entry.note;
+      }
 
       const small = document.createElement("small");
       small.textContent = entry.register_label
@@ -770,7 +901,8 @@
 
     function updateModeControls() {
       const chromatic = modeEl.value === "chromatic";
-      rootEl.disabled = chromatic;
+      rootsEl.classList.toggle("disabled", chromatic);
+      rootsEl.setAttribute("aria-disabled", String(chromatic));
       scaleEl.disabled = chromatic;
       octavesEl.disabled = chromatic;
     }
@@ -784,7 +916,7 @@
       const mode = modeEl.value;
 
       if (mode === "scale") {
-        const root = rootEl.value;
+        const root = selectedRoot;
         const scale = scaleEl.value;
         const octaves = Math.max(1, Math.min(3, Number(octavesEl.value) || 1));
         titleEl.textContent = `${root} ${scale} · ${octaves} octave${octaves > 1 ? "s" : ""} · ${entries.length} notes in range`;
@@ -834,13 +966,8 @@
     }
 
     function initControls() {
-      PITCHES_FLAT.forEach(name => {
-        const option = document.createElement("option");
-        option.value = name;
-        option.textContent = name;
-        rootEl.appendChild(option);
-      });
-      rootEl.value = "C";
+      buildRootPills();
+      setRoot("C");
 
       Object.keys(SCALE_PATTERNS).forEach(name => {
         const option = document.createElement("option");
@@ -852,8 +979,20 @@
     }
 
     function bindControls() {
-      [modeEl, rootEl, scaleEl, registerEl].forEach(el => {
+      [modeEl, scaleEl, registerEl].forEach(el => {
         el.addEventListener("change", onControlsChange);
+      });
+      rootsEl.addEventListener("keydown", (event) => {
+        if (rootsEl.classList.contains("disabled")) return;
+        const btns = Array.from(rootsEl.querySelectorAll(".root-btn"));
+        const current = btns.indexOf(document.activeElement);
+        if (current === -1) return;
+        let next = -1;
+        if (event.key === "ArrowRight" || event.key === "ArrowDown") next = (current + 1) % btns.length;
+        else if (event.key === "ArrowLeft" || event.key === "ArrowUp") next = (current - 1 + btns.length) % btns.length;
+        if (next === -1) return;
+        event.preventDefault();
+        btns[next].focus();
       });
       [preferFlatsEl, darkPressedEl].forEach(el => {
         el.addEventListener("change", onControlsChange);

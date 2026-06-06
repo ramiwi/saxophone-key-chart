@@ -25,6 +25,8 @@
       --ink: #000000;
       --muted: #444444;
       --line: #bbbbbb;
+      --accent: #a87a16;
+      --accent-fill: #f3e7c8;
       --key-pressed: #cccccc;
       --key-pressed-stroke: #000000;
       --key-pressed-label: #000000;
@@ -53,9 +55,24 @@
     body.hide-note-info .note small,
     body.hide-note-info .register-badge { display: none; }
     body.no-card-border .card { border-width: 0; }
-    h1 { margin: 0 0 8px; font-size: 1.35rem; font-weight: 700; }
+    .eyebrow {
+      margin: 0 0 8px;
+      font-size: .7rem;
+      letter-spacing: .18em;
+      text-transform: uppercase;
+      font-weight: 600;
+      color: var(--accent);
+    }
+    h1 {
+      margin: 0 0 10px;
+      font-size: clamp(1.6rem, 3.5vw, 2.2rem);
+      font-weight: 800;
+      line-height: 1.05;
+      letter-spacing: -0.01em;
+    }
+    h1 em { font-style: normal; color: var(--accent); }
     .sub { margin: 0 0 14px; color: var(--muted); font-size: .9rem; }
-    .sub a { color: var(--ink); }
+    .sub a { color: var(--accent); }
     .panel {
       display: grid;
       grid-template-columns: 1fr;
@@ -354,9 +371,13 @@
       padding: 8px;
       background: #fff;
     }
+    .card { transition: border-color .16s ease, box-shadow .16s ease; }
+    .card:hover { border-color: var(--accent); box-shadow: 0 6px 16px -12px rgba(0, 0, 0, .4); }
     .card.missing { border-style: dashed; opacity: 0.9; }
     .note { margin-bottom: 4px; }
     .note strong { font-size: var(--note-size, 1rem); display: block; }
+    .note strong .acc { color: var(--accent); }
+    .note strong .oct { color: var(--muted); font-weight: 400; font-size: .85em; margin-left: 1px; }
     .note small { color: var(--muted); font-size: .75rem; }
     .register-badge {
       display: inline-block;
@@ -447,7 +468,7 @@
          doubling it. */
       @page { size: A4 portrait; margin: 0; }
       .no-print { display: none !important; }
-      .panel, .sub, .legend, #status, .tune-lookup { display: none !important; }
+      .panel, .sub, .legend, #status, .tune-lookup, .eyebrow { display: none !important; }
       html, body { background: #fff; }
       .wrap { max-width: none; margin: 0; padding: var(--page-margin, 16px); }
       h1 { font-size: 1.1rem; margin-bottom: 6px; }
@@ -472,7 +493,8 @@
 </head>
 <body>
   <div class="wrap">
-    <h1>Notes → key charts</h1>
+    <p class="eyebrow">Alto · Tenor · Soprano · Baritone</p>
+    <h1>Notes <em>→</em> key charts</h1>
     <p class="sub">
       Paste space-separated note rows (e.g. <code>B4           C5</code>). Notes are aligned into shared
       columns by their character position, so the same column lines up vertically across rows.
@@ -1055,7 +1077,23 @@ E4`;
       const noteHeader = document.createElement("div");
       noteHeader.className = "note";
       const strong = document.createElement("strong");
-      strong.textContent = noteName;
+      const noteMatch = noteName.match(/^([A-G])(#|b)?(\d+)$/);
+      if (noteMatch) {
+        const [, letter, acc, octave] = noteMatch;
+        strong.append(document.createTextNode(letter));
+        if (acc) {
+          const accSpan = document.createElement("span");
+          accSpan.className = "acc";
+          accSpan.textContent = acc === "b" ? "♭" : "♯";
+          strong.appendChild(accSpan);
+        }
+        const octSpan = document.createElement("span");
+        octSpan.className = "oct";
+        octSpan.textContent = octave;
+        strong.appendChild(octSpan);
+      } else {
+        strong.textContent = noteName;
+      }
       const small = document.createElement("small");
       small.textContent = entry.display_label;
       const badge = document.createElement("span");
