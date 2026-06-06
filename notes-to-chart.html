@@ -81,9 +81,13 @@
       background: var(--bg);
     }
     .wrap {
-      max-width: 1400px;
-      margin: 20px auto;
+      max-width: 1200px;
+      margin: 10px auto 20px;
       padding: var(--page-margin, 16px);
+    }
+    @media (max-width: 900px) {
+      /* Match index.html mobile side padding to keep pages consistent. */
+      .wrap { padding: 16px; }
     }
     body.tight-rows .tutorial-row { padding: 0; border-width: 0; }
     body.hide-caption .caption { display: none; }
@@ -887,8 +891,15 @@ E4`;
       document.body.style.setProperty("--row-gap", px(rowGapEl, 16));
       document.body.style.setProperty("--note-size", px(noteSizeEl, 16));
       document.body.style.setProperty("--title-gap", px(titleGapEl, 8));
-      document.body.style.setProperty("--page-margin", px(pageMarginEl, 16));
+      applyPageMarginVar();
       updateMinimalState();
+    }
+
+    // Keep the page margin CSS variable in sync immediately so print preview
+    // reflects page-margin edits even when Live update is off.
+    function applyPageMarginVar() {
+      const pageMargin = Math.max(0, parseInt(pageMarginEl.value, 10) || 16);
+      document.body.style.setProperty("--page-margin", `${pageMargin}px`);
     }
 
     // Keep the master "Minimal" switch in sync: on only when every declutter
@@ -2532,6 +2543,8 @@ E4`;
     [defaultFingeringEl, perRowEl, colGapEl, rowGapEl, noteSizeEl, titleGapEl, pageMarginEl].forEach(el => {
       el.addEventListener("input", () => { autoRender(); syncUrl(); });
     });
+    pageMarginEl.addEventListener("input", applyPageMarginVar);
+    applyPageMarginVar();
 
     // Re-fit the cards to the viewport when it changes, without a full re-render.
     let resizeTimer = null;

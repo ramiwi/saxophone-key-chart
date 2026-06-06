@@ -10,13 +10,21 @@
     { href: "notes-to-chart.html", label: "Notes → charts" }
   ];
 
-  const current = (location.pathname.split("/").pop() || "index.html").toLowerCase();
+  function normalizePage(pathname) {
+    const raw = (String(pathname || "").split("/").pop() || "").toLowerCase();
+    if (!raw || raw === "index" || raw === "index.html") return "index.html";
+    if (raw === "notes-to-chart" || raw === "notes-to-chart.html") return "notes-to-chart.html";
+    return raw;
+  }
+
+  const current = normalizePage(location.pathname);
 
   const style = document.createElement("style");
   style.textContent = `
     .site-nav {
-      display: inline-flex;
-      margin: 0 0 16px;
+      display: flex;
+      width: fit-content;
+      margin: 0 auto 12px;
       border: 1px solid var(--line, #bbb);
       border-radius: 999px;
       background: #fff;
@@ -84,7 +92,7 @@
       const a = document.createElement("a");
       a.href = page.href === "index.html" ? getStoredIndexHref() : page.href;
       a.textContent = page.label;
-      if (page.href.toLowerCase() === current) a.setAttribute("aria-current", "page");
+      if (normalizePage(page.href) === current) a.setAttribute("aria-current", "page");
       nav.appendChild(a);
     }
     wrap.insertBefore(nav, wrap.firstChild);
