@@ -702,14 +702,29 @@
 
       const noteHeader = document.createElement("div");
       noteHeader.className = "note";
-      noteHeader.innerHTML = `
-        <div class="note-main">
-          <strong>${entry.note}</strong>
-          <small>${entry.display_label}${entry.register_label ? " · " + entry.register_label : ""}</small>
-          <span class="register-badge">${entry.register}</span>
-        </div>
-        <span class="note-idx">#${index + 1}</span>
-      `;
+
+      const noteMain = document.createElement("div");
+      noteMain.className = "note-main";
+
+      const strong = document.createElement("strong");
+      strong.textContent = entry.note;
+
+      const small = document.createElement("small");
+      small.textContent = entry.register_label
+        ? `${entry.display_label} · ${entry.register_label}`
+        : entry.display_label;
+
+      const badge = document.createElement("span");
+      badge.className = "register-badge";
+      badge.textContent = entry.register;
+
+      noteMain.append(strong, small, badge);
+
+      const noteIdx = document.createElement("span");
+      noteIdx.className = "note-idx";
+      noteIdx.textContent = `#${index + 1}`;
+
+      noteHeader.append(noteMain, noteIdx);
       card.appendChild(noteHeader);
 
       let activeOption = options[0];

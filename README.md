@@ -8,14 +8,34 @@ Main pages:
 
 ## Repository layout
 
+Pages:
 - `notes-to-chart.html` - main "Notes -> key charts" app
 - `index.html` - base key chart page
-- `schema.js`, `diagram.js` - embedded schema/SVG assets used by pages
+
+Shared front-end assets:
+- `nav.js` - shared top navigation injected into each page
+- `chart-transfer.js` - one-shot handoff from `index.html` to `notes-to-chart.html`
+- `app-footer.js`, `app-footer.css` - footer + version label
+- `ui-icons.js`, `ui-icons.css` - shared inline icon helpers
+- `version.js` - displayed app version string
+
+Schema/diagram assets:
+- `saxophone key-schema-v3.json`, `sax-key-diagram-v2os.svg` - source schema + SVG
+- `schema.js`, `diagram.js` - **generated** from the source files above (do not edit by hand)
+- `sync-assets.mjs` - regenerates `schema.js`/`diagram.js` from the source JSON/SVG (run `node sync-assets.mjs`)
+
+Backend (Cloudflare):
 - `functions/` - Cloudflare Pages Functions (preset API)
 - `migrations/0001_presets.sql` - D1 schema for cloud presets
 - `scripts/migrate-d1.sh` - helper to run D1 migration
+- `scripts/deploy-pages.sh` - builds `public/` and deploys to Cloudflare Pages
+- `wrangler.toml` - Cloudflare config (Pages output dir + D1 binding)
+- `wrangler.toml.example` - template for `wrangler.toml`
+
+Docs:
 - `cloudflare-presets-api.md` - API contract + setup details
 - `tune-lookup.md` - tune lookup/import behavior and sources
+- `docs/` - reference material
 
 ## Local development
 
@@ -43,7 +63,22 @@ Cloud modes call:
 
 See `cloudflare-presets-api.md` for exact request/response contract.
 
+### Identity / trust model
+
+Cloud presets are **not authenticated**. Each browser generates an anonymous
+device id (stored locally) and sends it as the `X-Device-Id` header; presets are
+scoped only by that id. There is no account or login, and the API allows any
+origin (CORS `*`). Anyone who knows or guesses a device id can read, overwrite,
+or delete that device's presets. Treat cloud sync as a convenience/backup for
+low-sensitivity data only — do not store anything private.
+
 ### Required Cloudflare config
+
+If you don't already have a `wrangler.toml`, copy the template:
+
+```bash
+cp wrangler.toml.example wrangler.toml
+```
 
 `wrangler.toml` must include:
 
