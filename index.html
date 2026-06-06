@@ -903,6 +903,9 @@
       const chromatic = modeEl.value === "chromatic";
       rootsEl.classList.toggle("disabled", chromatic);
       rootsEl.setAttribute("aria-disabled", String(chromatic));
+      rootsEl.querySelectorAll(".root-btn").forEach(btn => {
+        btn.disabled = chromatic;
+      });
       scaleEl.disabled = chromatic;
       octavesEl.disabled = chromatic;
     }
@@ -993,6 +996,11 @@
         if (next === -1) return;
         event.preventDefault();
         btns[next].focus();
+        const nextRoot = btns[next].dataset.root;
+        if (nextRoot && nextRoot !== selectedRoot) {
+          setRoot(nextRoot);
+          onControlsChange();
+        }
       });
       [preferFlatsEl, darkPressedEl].forEach(el => {
         el.addEventListener("change", onControlsChange);
