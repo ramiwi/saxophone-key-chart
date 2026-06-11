@@ -2382,12 +2382,16 @@ E4`;
             splitBars,
             melodyOnly: midiMelodyOnlyEl.checked
           });
-          // The beat grid relies on character-offset alignment, which only applies in
-          // aligned mode — so clear "Diagrams per row" if it's set.
+          // The beat grid relies on character-offset alignment with placeholder
+          // columns, so disable settings that compact notes left-to-right.
           let clearedNote = "";
           if (splitBars && (parseInt(perRowEl.value, 10) || 0) > 0) {
             perRowEl.value = "";
             clearedNote = " · cleared Diagrams-per-row for bar alignment";
+          }
+          if (splitBars && hideEmptyEl.checked) {
+            setSwitch(hideEmptyEl, false);
+            clearedNote += " · showed empty cells for bar alignment";
           }
           // Pitches are already transposed for the chosen instrument; don't re-spell.
           importOpts = { skipTranspose: true };
