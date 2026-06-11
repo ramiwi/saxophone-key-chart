@@ -611,6 +611,30 @@
           </p>
         </div>
       </details>
+
+      <details class="disclosure" data-remember="n2c.transpose.open">
+        <summary>Transpose by key</summary>
+        <div class="disclosure-body">
+          <div class="lookup-row">
+            <label class="field" style="flex:0 0 auto">
+              <span class="field-label">From key</span>
+              <select id="transposeFrom" aria-label="Transpose from key"></select>
+            </label>
+            <label class="field" style="flex:0 0 auto">
+              <span class="field-label">To key</span>
+              <select id="transposeTo" aria-label="Transpose to key"></select>
+            </label>
+            <button type="button" id="transposeResetBtn">Reset</button>
+            <button type="button" id="transposeBakeBtn" title="Rewrite the note text above with the transposed pitches.">Bake into text</button>
+          </div>
+          <p id="transposeInfo" class="lookup-hint" role="status" aria-live="polite">No transposition.</p>
+          <p class="lookup-hint">
+            Shifts every rendered diagram and staff by the interval between the two keys, without
+            changing the text above. <strong>Bake into text</strong> writes the transposed notes
+            back into the editor. Enharmonic spelling follows the <strong>Prefer flats</strong> setting.
+          </p>
+        </div>
+      </details>
     </div>
 
     <details class="disclosure no-print" data-remember="n2c.settings.open">
@@ -837,6 +861,11 @@ E4`;
     const pageMarginEl = document.getElementById("pageMargin");
     const defaultFingeringEl = document.getElementById("defaultFingering");
     const showStaffEl = document.getElementById("showStaff");
+    const transposeFromEl = document.getElementById("transposeFrom");
+    const transposeToEl = document.getElementById("transposeTo");
+    const transposeInfoEl = document.getElementById("transposeInfo");
+    const transposeResetBtn = document.getElementById("transposeResetBtn");
+    const transposeBakeBtn = document.getElementById("transposeBakeBtn");
 
     // Switches controlled by the master "Minimal" toggle.
     const DECLUTTER_SWITCHES = [
@@ -938,6 +967,42 @@ E4`;
       if (instrument === "bb") return 2;   // Concert -> Bb written
       if (instrument === "eb") return 9;   // Concert -> Eb written
       return 0;
+    }
+
+    // Combined enharmonic label for a pitch class, like the reference app: a
+    // natural shows its letter ("C"), an accidental shows both spellings ("C#/Db").
+    function keyLabelForPc(pc) {
+      const sharp = PITCHES_SHARP[pc];
+      const flat = PITCHES_FLAT[pc];
+      return sharp === flat ? sharp : `${sharp}/${flat}`;
+    }
+
+    // Populate the From/To key selects with the 12 pitch classes (value = pc index).
+    function populateTransposeSelects() {
+      for (const sel of [transposeFromEl, transposeToEl]) {
+        sel.replaceChildren();
+        for (let pc = 0; pc < 12; pc++) {
+          const opt = document.createElement("option");
+          opt.value = String(pc);
+          opt.textContent = keyLabelForPc(pc);
+          sel.appendChild(opt);
+        }
+        sel.value = "0";
+      }
+    }
+
+    // Upward interval (0–11 semitones) implied by the From/To key choice.
+    function keyTransposeSemitones() {
+      const from = parseInt(transposeFromEl.value, 10) || 0;
+      const to = parseInt(transposeToEl.value, 10) || 0;
+      return ((to - from) % 12 + 12) % 12;
+    }
+
+    function updateTransposeInfo() {
+      const semis = keyTransposeSemitones();
+      transposeInfoEl.textContent = semis
+        ? `Up ${semis} semitone${semis === 1 ? "" : "s"}.`
+        : "No transposition.";
     }
 
     function transposeScientific(note, semitones, preferFlats) {
@@ -1344,6 +1409,11 @@ E4`;
       // First pass: tokenize every non-empty line and collect the set of note
       // start offsets. Each distinct offset becomes one shared grid column.
       // A line starting with ";" is a comment that titles the next note row.
+      // The From/To key choice shifts each note token's text in place, leaving
+      // the textarea untouched (Reset undoes it; "Bake into text" makes it
+      // permanent). Offsets come from the ORIGINAL line widths, so changing a
+      // note name's length (e.g. C4 -> Bb4) doesn't break shared-column alignment.
+      const transposeSemis = keyTransposeSemitones();
       const parsedRows = [];
       const offsets = new Set();
       let pendingTitle = null;
@@ -1352,6 +1422,14 @@ E4`;
         const titleMatch = line.match(/^\s*;\s?(.*)$/);
         if (titleMatch) { pendingTitle = titleMatch[1].trim(); continue; }
         const tokens = tokenizeLine(line);
+        if (transposeSemis) {
+          for (const token of tokens) {
+            if (token.type === "note") {
+              const shifted = transposeScientific(token.text, transposeSemis, preferFlats);
+              if (parseScientific(shifted)) token.text = shifted;
+            }
+          }
+        }
         parsedRows.push({ tokens, title: pendingTitle });
         pendingTitle = null;
         for (const token of tokens) {
@@ -1684,7 +1762,9 @@ E4`;
       nsize: "16",
       tgap: "8",
       pmar: "16",
-      def: ""
+      def: "",
+      tfrom: "0",
+      tto: "0"
     };
     const SETTINGS_STORAGE_KEY = "sax_chart.notes_to_chart.settings.v1";
     const SETTINGS_STORAGE_AREAS = ["localStorage", "sessionStorage"];
@@ -1737,6 +1817,8 @@ E4`;
       state.tgap = titleGapEl.value;
       state.pmar = pageMarginEl.value;
       state.def = defaultFingeringEl.value.trim();
+      state.tfrom = transposeFromEl.value;
+      state.tto = transposeToEl.value;
       return state;
     }
 
@@ -1760,6 +1842,8 @@ E4`;
       p.set("tgap", state.tgap || SETTINGS_DEFAULTS.tgap);
       p.set("pmar", state.pmar || SETTINGS_DEFAULTS.pmar);
       if (state.def) p.set("def", state.def);
+      p.set("tfrom", state.tfrom || SETTINGS_DEFAULTS.tfrom);
+      p.set("tto", state.tto || SETTINGS_DEFAULTS.tto);
       return "#" + p.toString();
     }
 
@@ -1781,6 +1865,9 @@ E4`;
       titleGapEl.value = p.get("tgap") || fallback.tgap || SETTINGS_DEFAULTS.tgap;
       pageMarginEl.value = p.get("pmar") || fallback.pmar || SETTINGS_DEFAULTS.pmar;
       defaultFingeringEl.value = p.get("def") || fallback.def || SETTINGS_DEFAULTS.def;
+      transposeFromEl.value = p.get("tfrom") || fallback.tfrom || SETTINGS_DEFAULTS.tfrom;
+      transposeToEl.value = p.get("tto") || fallback.tto || SETTINGS_DEFAULTS.tto;
+      updateTransposeInfo();
     }
 
     // Reflect the current notes + settings into the address bar (no history spam).
@@ -2509,6 +2596,7 @@ E4`;
     }
 
     // ---- Init: link params win, then saved draft, then the built-in sample ----
+    populateTransposeSelects();
     const initParams = parseHash();
     const storedSettings = readStoredSettings();
     applySettingsFromParams(initParams, storedSettings);
@@ -2545,6 +2633,28 @@ E4`;
     });
     pageMarginEl.addEventListener("input", applyPageMarginVar);
     applyPageMarginVar();
+
+    [transposeFromEl, transposeToEl].forEach(el => {
+      el.addEventListener("change", () => { updateTransposeInfo(); autoRender(); syncUrl(); });
+    });
+    transposeResetBtn.addEventListener("click", () => {
+      transposeFromEl.value = "0";
+      transposeToEl.value = "0";
+      updateTransposeInfo();
+      scheduleRender();   // explicit command: re-render even when Live update is off
+      syncUrl();
+    });
+    transposeBakeBtn.addEventListener("click", () => {
+      const semis = keyTransposeSemitones();
+      if (!semis) { flash("Pick two different keys first."); return; }
+      inputEl.value = transposeNoteText(inputEl.value, semis, preferFlatsEl.checked);
+      transposeFromEl.value = transposeToEl.value;   // interval back to 0 so it isn't double-applied
+      updateTransposeInfo();
+      saveDraft(inputEl.value);
+      scheduleRender();
+      syncUrl();
+      flash("Transposed notes written into the text.");
+    });
 
     // Re-fit the cards to the viewport when it changes, without a full re-render.
     let resizeTimer = null;
