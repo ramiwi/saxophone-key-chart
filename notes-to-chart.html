@@ -755,6 +755,10 @@
       <div class="switch-field">
         <wa-switch id="liveUpdate" checked>Live update</wa-switch>
       </div>
+      <span class="divider"></span>
+      <button type="button" id="undoBtn" data-ui-icon="undo" title="Undo notes change (Ctrl+Z)" disabled>Undo</button>
+      <button type="button" id="redoBtn" data-ui-icon="redo" title="Redo notes change (Ctrl+Shift+Z / Ctrl+Y)" disabled>Redo</button>
+      <span class="divider"></span>
       <button type="button" id="cleanA4Btn" data-ui-icon="printer" title="One-click clean layout for A4 printing: compact diagrams, declutter on, tighter spacing.">Clean A4</button>
       <span class="divider"></span>
       <label>
@@ -866,6 +870,8 @@ E4`;
     const transposeInfoEl = document.getElementById("transposeInfo");
     const transposeResetBtn = document.getElementById("transposeResetBtn");
     const transposeBakeBtn = document.getElementById("transposeBakeBtn");
+    const undoBtn = document.getElementById("undoBtn");
+    const redoBtn = document.getElementById("redoBtn");
 
     // Switches controlled by the master "Minimal" toggle.
     const DECLUTTER_SWITCHES = [
@@ -1891,8 +1897,10 @@ E4`;
       if (!name) return;
       const presets = activePresetMap;
       if (presets[name] === undefined) return;
+      commitTypingSnapshot();
       inputEl.value = presets[name];
       saveDraft(inputEl.value);
+      recordHistory();
       scheduleRender();
       syncUrl();
       flash(`Loaded “${name}”.`);
@@ -2080,6 +2088,7 @@ E4`;
       const semitones = selectedTransposeSemitones();
       const prepared = transposeNoteText(text, semitones, preferFlatsEl.checked);
       if (!prepared.trim()) throw new Error("No notes found to import.");
+      commitTypingSnapshot();
       if (mode === "append") {
         const sep = inputEl.value.trim() ? "\n\n" : "";
         inputEl.value = inputEl.value.trimEnd() + sep + prepared.trim();
@@ -2087,6 +2096,7 @@ E4`;
         inputEl.value = prepared.trim();
       }
       saveDraft(inputEl.value);
+      recordHistory();
       scheduleRender();
       syncUrl();
       const transposedLabel = semitones
@@ -2555,8 +2565,10 @@ E4`;
       applySettingsFromParams(p);
       const shared = p.get("notes");
       if (shared !== null && shared !== inputEl.value) {
+        commitTypingSnapshot();
         inputEl.value = shared;
         saveDraft(shared);
+        recordHistory();
       }
       scheduleRender();
       flash("Loaded from link.");
@@ -2595,6 +2607,89 @@ E4`;
       return text;
     }
 
+    // ---- Notes undo/redo history ----
+    // Native textarea undo only covers typing and is wiped whenever the app
+    // swaps the content (preset load, tune/file import, Bake, shared link).
+    // This keeps an app-level history of textarea snapshots so all of those are
+    // undoable. `notesHistory[historyPos]` is always the current state; entries
+    // after historyPos are the redo branch. Typing is debounced into one entry
+    // per burst. We cap the undo depth at HISTORY_LIMIT steps (HISTORY_LIMIT + 1
+    // snapshots). NB: named `notesHistory`, not `history`, to avoid shadowing the
+    // global window.history used by syncUrl().
+    const HISTORY_LIMIT = 10;
+    let notesHistory = [];
+    let historyPos = -1;
+    let typingTimer = null;
+    let applyingHistory = false;
+
+    // True when the textarea holds typed-but-not-yet-recorded changes (the 700ms
+    // debounce hasn't fired). Such an edit is undoable (the shortcut/button flush
+    // it first), and committing it would drop the redo branch.
+    function pendingTypingEdit() {
+      return historyPos < 0 || notesHistory[historyPos] !== inputEl.value;
+    }
+
+    function updateUndoRedoButtons() {
+      undoBtn.disabled = !(historyPos > 0 || pendingTypingEdit());
+      redoBtn.disabled = pendingTypingEdit() || historyPos >= notesHistory.length - 1;
+    }
+
+    // Push the current textarea value as a new history entry, dropping any redo
+    // branch. No-op if it matches the current snapshot.
+    function recordHistory() {
+      const value = inputEl.value;
+      if (historyPos >= 0 && notesHistory[historyPos] === value) return;
+      notesHistory = notesHistory.slice(0, historyPos + 1);
+      notesHistory.push(value);
+      if (notesHistory.length > HISTORY_LIMIT + 1) notesHistory.shift();
+      historyPos = notesHistory.length - 1;
+      updateUndoRedoButtons();
+    }
+
+    // Seed the initial state (called once at init); resets the stack.
+    function initHistory() {
+      notesHistory = [inputEl.value];
+      historyPos = 0;
+      updateUndoRedoButtons();
+    }
+
+    function scheduleTypingSnapshot() {
+      if (applyingHistory) return;
+      clearTimeout(typingTimer);
+      typingTimer = setTimeout(() => { typingTimer = null; recordHistory(); }, 700);
+    }
+
+    // Flush any pending typing burst so it becomes its own undo step. Called
+    // before undo/redo and before every programmatic content change.
+    function commitTypingSnapshot() {
+      if (typingTimer) { clearTimeout(typingTimer); typingTimer = null; }
+      recordHistory();
+    }
+
+    function applyHistorySnapshot() {
+      applyingHistory = true;
+      inputEl.value = notesHistory[historyPos];
+      applyingHistory = false;
+      saveDraft(inputEl.value);
+      scheduleRender();
+      syncUrl();
+      updateUndoRedoButtons();
+    }
+
+    function undoNotes() {
+      commitTypingSnapshot();
+      if (historyPos <= 0) return;
+      historyPos--;
+      applyHistorySnapshot();
+    }
+
+    function redoNotes() {
+      commitTypingSnapshot();
+      if (historyPos >= notesHistory.length - 1) return;
+      historyPos++;
+      applyHistorySnapshot();
+    }
+
     // ---- Init: link params win, then saved draft, then the built-in sample ----
     populateTransposeSelects();
     const initParams = parseHash();
@@ -2614,12 +2709,30 @@ E4`;
     }
     refreshPresetSelect("");
     syncUrl();
+    initHistory();
 
     renderBtn.addEventListener("click", scheduleRender);
+    undoBtn.addEventListener("click", undoNotes);
+    redoBtn.addEventListener("click", redoNotes);
     inputEl.addEventListener("input", () => {
       saveDraft(inputEl.value);
       syncUrl();
       autoRender();
+      scheduleTypingSnapshot();
+      updateUndoRedoButtons();   // reflect the pending (un-debounced) edit immediately
+    });
+    // App-level undo/redo (also covers programmatic content swaps that native
+    // textarea undo loses). Ctrl/Cmd+Z = undo, Ctrl/Cmd+Shift+Z or Ctrl+Y = redo.
+    // Only act for the notes editor: when another editable control is focused,
+    // let it keep its own native undo instead of rewinding the notes.
+    document.addEventListener("keydown", (e) => {
+      if (!(e.ctrlKey || e.metaKey)) return;
+      const key = e.key.toLowerCase();
+      if (key !== "z" && key !== "y") return;
+      const t = e.target;
+      if (t && t !== inputEl && t.matches && t.matches("input, textarea, select, [contenteditable]")) return;
+      if (key === "z" && !e.shiftKey) { e.preventDefault(); undoNotes(); }
+      else { e.preventDefault(); redoNotes(); }
     });
     [preferFlatsEl, darkPressedEl, sizeScaleEl, hideEmptyEl, hideAltSelectEl,
      hidePalmSpatulaEl, tightRowsEl, hideCaptionEl, hideNoteInfoEl,
@@ -2647,10 +2760,12 @@ E4`;
     transposeBakeBtn.addEventListener("click", () => {
       const semis = keyTransposeSemitones();
       if (!semis) { flash("Pick two different keys first."); return; }
+      commitTypingSnapshot();
       inputEl.value = transposeNoteText(inputEl.value, semis, preferFlatsEl.checked);
       transposeFromEl.value = transposeToEl.value;   // interval back to 0 so it isn't double-applied
       updateTransposeInfo();
       saveDraft(inputEl.value);
+      recordHistory();
       scheduleRender();
       syncUrl();
       flash("Transposed notes written into the text.");
