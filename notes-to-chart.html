@@ -591,6 +591,15 @@
             <button type="button" id="tuneFileReplaceBtn">Import file (replace)</button>
             <button type="button" id="tuneFileAppendBtn">Import file (append)</button>
           </div>
+          <div class="lookup-row" id="midiOptions" hidden>
+            <select id="midiTrackSelect" aria-label="MIDI track"></select>
+            <label class="switch-field" style="flex:0 0 auto">
+              <wa-switch id="midiMelodyOnly" checked title="Collapse simultaneous notes (chords) to the highest pitch so the melody imports cleanly.">Melody only (top note)</wa-switch>
+            </label>
+            <label class="switch-field" style="flex:0 0 auto">
+              <wa-switch id="midiSplitBars" checked title="One row per measure, with notes placed on a beat grid so bars and beats align vertically (rests show as gaps).">Split into bars (beat grid)</wa-switch>
+            </label>
+          </div>
         </div>
       </details>
 
@@ -901,6 +910,10 @@ E4`;
     const tuneFileInputEl = document.getElementById("tuneFileInput");
     const tuneFileReplaceBtn = document.getElementById("tuneFileReplaceBtn");
     const tuneFileAppendBtn = document.getElementById("tuneFileAppendBtn");
+    const midiOptionsEl = document.getElementById("midiOptions");
+    const midiTrackSelectEl = document.getElementById("midiTrackSelect");
+    const midiMelodyOnlyEl = document.getElementById("midiMelodyOnly");
+    const midiSplitBarsEl = document.getElementById("midiSplitBars");
     const tuneSearchStateEl = document.getElementById("tuneSearchState");
 
     function showStatus(message, isError = false) {
@@ -2002,6 +2015,9 @@ E4`;
     const ADAPTER_URL_KEY = "saxNotesChart.catalogAdapterUrl";
     const STEP_PC = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
     let lookupTuneCache = null;
+    // Parsed MIDI for the currently selected .mid file: { midi, tracks, fileName }.
+    // Cached on file change so the track selector and import don't re-parse.
+    let midiCache = null;
     let lookupSearchResults = [];
     let tunepalSourceIds = null;
     let tuneSearchDebounceTimer = null;
@@ -2084,9 +2100,13 @@ E4`;
       return String(fileName || "Imported tune").replace(/\.[^.]+$/, "");
     }
 
-    function applyImportedText(mode, text, label) {
-      const semitones = selectedTransposeSemitones();
-      const prepared = transposeNoteText(text, semitones, preferFlatsEl.checked);
+    function applyImportedText(mode, text, label, opts = {}) {
+      // skipTranspose: the caller already baked the instrument transpose into the text
+      // (e.g. MIDI beat grid, where re-spelling would shift fixed-width slot columns).
+      const semitones = opts.skipTranspose ? 0 : selectedTransposeSemitones();
+      const prepared = opts.skipTranspose
+        ? String(text || "")
+        : transposeNoteText(text, semitones, preferFlatsEl.checked);
       if (!prepared.trim()) throw new Error("No notes found to import.");
       commitTypingSnapshot();
       if (mode === "append") {
@@ -2219,24 +2239,108 @@ E4`;
       return [`; ${title}\n${notes.join(" ")}`];
     }
 
-    function parseMidiFileToRows(arrayBuffer, fileName) {
-      if (typeof window.Midi !== "function") {
-        throw new Error("MIDI parser still loading — try again in a moment.");
-      }
-      const midi = new window.Midi(arrayBuffer);
-      const tracks = midi.tracks
+    function isMidiFileName(name) {
+      const l = String(name || "").toLowerCase();
+      return l.endsWith(".mid") || l.endsWith(".midi");
+    }
+
+    // Pitched, non-percussion tracks, densest (most notes) first.
+    function pitchedTracks(midi) {
+      return midi.tracks
         .filter(t => t.notes && t.notes.length && !(t.instrument && t.instrument.percussion))
         .sort((a, b) => b.notes.length - a.notes.length);
-      if (!tracks.length) throw new Error("No pitched notes found in MIDI file.");
+    }
+
+    function midiTrackLabel(track, idx) {
+      const name = (track.name && track.name.trim())
+        || (track.instrument && track.instrument.name)
+        || `Track ${idx + 1}`;
+      const ch = Number.isFinite(track.channel) ? ` · ch ${track.channel}` : "";
+      return `${name}${ch} · ${track.notes.length} notes`;
+    }
+
+    // Collapse simultaneous notes (same onset tick) to the highest pitch (melody).
+    function collapseToMelody(notes) {
+      const byTick = new Map();
+      for (const n of notes) {
+        const prev = byTick.get(n.ticks);
+        if (!prev || n.midi > prev.midi) byTick.set(n.ticks, n);
+      }
+      return [...byTick.values()].sort((a, b) => a.ticks - b.ticks);
+    }
+
+    // Character width of one beat-grid slot. A note is left-justified into its slot,
+    // so a note in slot s always starts at character offset s*SLOT_W — which is what the
+    // aligned-mode column engine keys on. 5 fits the longest pitch token ("A#4") + gap.
+    const MIDI_SLOT_W = 5;
+
+    // Pick how finely to subdivide each beat (1=quarter, 2=eighth, 4=sixteenth) from the
+    // smallest gap between note onsets, so dense passages still resolve without making
+    // simple tunes needlessly wide.
+    function chooseSubdivision(items, beatTicks) {
+      let minFrac = 1;
+      for (let i = 1; i < items.length; i++) {
+        const d = (items[i].ticks - items[i - 1].ticks) / beatTicks;
+        if (d > 0.01 && d < minFrac) minFrac = d;
+      }
+      if (minFrac <= 0.3) return 4;
+      if (minFrac <= 0.6) return 2;
+      return 1;
+    }
+
+    // Place notes on a per-measure beat grid: one row per bar, each note left-justified
+    // into the fixed-width slot for its metric position so bars/beats align vertically.
+    function midiItemsToBarGrid(midi, items) {
+      const ppq = midi.header.ppq || 480;
+      const ts = (midi.header.timeSignatures
+        && midi.header.timeSignatures[0]
+        && midi.header.timeSignatures[0].timeSignature) || [4, 4];
+      const num = ts[0] || 4;
+      const den = ts[1] || 4;
+      const beatTicks = ppq * 4 / den;            // ticks per notated beat
+      const measureTicks = beatTicks * num;       // ticks per measure
+      const subdiv = chooseSubdivision(items, beatTicks);
+      const slotTicks = beatTicks / subdiv;
+      const slotsPerMeasure = num * subdiv;
+
+      const measures = new Map();
+      for (const it of items) {
+        const m = Math.floor(it.ticks / measureTicks);
+        const within = it.ticks - m * measureTicks;
+        let slot = Math.round(within / slotTicks);
+        slot = Math.min(Math.max(slot, 0), slotsPerMeasure - 1);
+        const arr = measures.get(m) || new Array(slotsPerMeasure).fill(null);
+        while (slot < slotsPerMeasure && arr[slot]) slot++;   // keep collisions visible
+        if (slot >= slotsPerMeasure) slot = slotsPerMeasure - 1;
+        arr[slot] = it.sci;
+        measures.set(m, arr);
+      }
+
+      const rows = [];
+      for (const m of [...measures.keys()].sort((a, b) => a - b)) {
+        const arr = measures.get(m);
+        let line = "";
+        for (let s = 0; s < arr.length; s++) line += (arr[s] || "").padEnd(MIDI_SLOT_W, " ");
+        rows.push(`; Bar ${m + 1}\n${line.replace(/\s+$/, "")}`);
+      }
+      return rows;
+    }
+
+    // Build note rows from one chosen MIDI track. Instrument transpose (C/Bb/Eb) is
+    // applied to the pitches here so the emitted text is final — the caller imports it
+    // with skipTranspose, keeping slot widths fixed for the beat grid.
+    function midiTrackToRows(midi, track, opts) {
       const preferFlats = preferFlatsEl.checked;
-      const notes = tracks[0].notes
-        .slice()
-        .sort((a, b) => a.time - b.time)
-        .map(n => midiToScientific(Math.round(n.midi), preferFlats))
-        .filter(n => parseScientific(n));
-      if (!notes.length) throw new Error("No usable note data in MIDI file.");
-      const title = midi.header.name || tracks[0].name || baseNameFromFile(fileName);
-      return [`; ${title}\n${notes.join(" ")}`];
+      const semitones = selectedTransposeSemitones();
+      let notes = track.notes.slice().sort((a, b) => a.ticks - b.ticks);
+      if (opts.melodyOnly) notes = collapseToMelody(notes);
+      const items = notes
+        .map(n => ({ ticks: n.ticks, sci: midiToScientific(Math.round(n.midi) + semitones, preferFlats) }))
+        .filter(it => parseScientific(it.sci));
+      if (!items.length) throw new Error("No usable note data in this MIDI track.");
+      if (opts.splitBars) return midiItemsToBarGrid(midi, items);
+      const title = (track.name && track.name.trim()) || midi.header.name || "MIDI";
+      return [`; ${title}\n${items.map(it => it.sci).join(" ")}`];
     }
 
     async function runFileImport(mode) {
@@ -2250,16 +2354,52 @@ E4`;
       try {
         const lower = file.name.toLowerCase();
         let rows = [];
+        let label = `${file.name}`;
+        let importOpts = {};
         if (lower.endsWith(".abc")) {
           rows = parseAbcFileToRows(await file.text(), file.name);
+          label = `${rows.length} row(s) from ${file.name}`;
         } else if (lower.endsWith(".musicxml") || lower.endsWith(".xml")) {
           rows = parseMusicXmlFileToRows(await file.text(), file.name);
-        } else if (lower.endsWith(".mid") || lower.endsWith(".midi")) {
-          rows = parseMidiFileToRows(await file.arrayBuffer(), file.name);
+          label = `${rows.length} row(s) from ${file.name}`;
+        } else if (isMidiFileName(lower)) {
+          let midi, tracks;
+          if (midiCache && midiCache.fileName === file.name) {
+            ({ midi, tracks } = midiCache);
+          } else {
+            if (typeof window.Midi !== "function") {
+              throw new Error("MIDI parser still loading — try again in a moment.");
+            }
+            midi = new window.Midi(await file.arrayBuffer());
+            tracks = pitchedTracks(midi);
+          }
+          if (!tracks.length) throw new Error("No pitched notes found in MIDI file.");
+          const trackIdx = Math.min(
+            Math.max(0, parseInt(midiTrackSelectEl.value, 10) || 0), tracks.length - 1);
+          const splitBars = midiSplitBarsEl.checked;
+          const track = tracks[trackIdx];
+          rows = midiTrackToRows(midi, track, {
+            splitBars,
+            melodyOnly: midiMelodyOnlyEl.checked
+          });
+          // The beat grid relies on character-offset alignment, which only applies in
+          // aligned mode — so clear "Diagrams per row" if it's set.
+          let clearedNote = "";
+          if (splitBars && (parseInt(perRowEl.value, 10) || 0) > 0) {
+            perRowEl.value = "";
+            clearedNote = " · cleared Diagrams-per-row for bar alignment";
+          }
+          // Pitches are already transposed for the chosen instrument; don't re-spell.
+          importOpts = { skipTranspose: true };
+          const trackName = (track.name && track.name.trim())
+            || (track.instrument && track.instrument.name) || `track ${trackIdx + 1}`;
+          label = splitBars
+            ? `${rows.length} bar(s) from ${trackName} in ${file.name}${clearedNote}`
+            : `${trackName} from ${file.name}`;
         } else {
           throw new Error("Unsupported file type. Use .abc, .musicxml/.xml, .mid/.midi.");
         }
-        applyImportedText(mode, rows.join("\n\n"), `${rows.length} row(s) from ${file.name}`);
+        applyImportedText(mode, rows.join("\n\n"), label, importOpts);
       } catch (err) {
         flash(err.message || "Couldn't import file.");
       } finally {
@@ -2559,6 +2699,34 @@ E4`;
     tuneAppendBtn.addEventListener("click", () => applyTuneImport("append"));
     tuneFileReplaceBtn.addEventListener("click", () => runFileImport("replace"));
     tuneFileAppendBtn.addEventListener("click", () => runFileImport("append"));
+
+    // When a .mid/.midi file is chosen, parse it up front and offer a per-track
+    // selector (defaulting to the densest track). Other file types hide the options.
+    async function onMidiFileSelected() {
+      const file = tuneFileInputEl.files && tuneFileInputEl.files[0];
+      midiCache = null;
+      midiTrackSelectEl.replaceChildren();
+      midiOptionsEl.hidden = true;
+      if (!file || !isMidiFileName(file.name) || typeof window.Midi !== "function") return;
+      try {
+        const midi = new window.Midi(await file.arrayBuffer());
+        const tracks = pitchedTracks(midi);
+        if (!tracks.length) return;
+        midiCache = { midi, tracks, fileName: file.name };
+        tracks.forEach((t, idx) => {
+          const opt = document.createElement("option");
+          opt.value = String(idx);
+          opt.textContent = midiTrackLabel(t, idx);
+          midiTrackSelectEl.appendChild(opt);
+        });
+        midiTrackSelectEl.value = "0";
+        midiOptionsEl.hidden = false;
+      } catch (_) {
+        midiCache = null;
+        midiOptionsEl.hidden = true;
+      }
+    }
+    tuneFileInputEl.addEventListener("change", onMidiFileSelected);
 
     window.addEventListener("hashchange", () => {
       const p = parseHash();
