@@ -2290,7 +2290,7 @@ E4`;
 
     // Place notes on a per-measure beat grid: one row per bar, each note left-justified
     // into the fixed-width slot for its metric position so bars/beats align vertically.
-    function midiItemsToBarGrid(midi, items) {
+    function midiItemsToBarGrid(midi, items, title) {
       const ppq = midi.header.ppq || 480;
       const ts = (midi.header.timeSignatures
         && midi.header.timeSignatures[0]
@@ -2316,14 +2316,22 @@ E4`;
         measures.set(m, arr);
       }
 
+      const prefix = (title && title.trim()) || "MIDI";
       const rows = [];
       for (const m of [...measures.keys()].sort((a, b) => a - b)) {
         const arr = measures.get(m);
         let line = "";
         for (let s = 0; s < arr.length; s++) line += (arr[s] || "").padEnd(MIDI_SLOT_W, " ");
-        rows.push(`; Bar ${m + 1}\n${line.replace(/\s+$/, "")}`);
+        rows.push(`; ${prefix} - Bar ${m + 1}\n${line.replace(/\s+$/, "")}`);
       }
       return rows;
+    }
+
+    function fileTitleForComment(fileName) {
+      return (fileName || "MIDI")
+        .replace(/\.(mid|midi)$/i, "")
+        .replace(/\s+/g, " ")
+        .trim() || "MIDI";
     }
 
     // Build note rows from one chosen MIDI track. Instrument transpose (C/Bb/Eb) is
@@ -2338,7 +2346,7 @@ E4`;
         .map(n => ({ ticks: n.ticks, sci: midiToScientific(Math.round(n.midi) + semitones, preferFlats) }))
         .filter(it => parseScientific(it.sci));
       if (!items.length) throw new Error("No usable note data in this MIDI track.");
-      if (opts.splitBars) return midiItemsToBarGrid(midi, items);
+      if (opts.splitBars) return midiItemsToBarGrid(midi, items, opts.title);
       const title = (track.name && track.name.trim()) || midi.header.name || "MIDI";
       return [`; ${title}\n${items.map(it => it.sci).join(" ")}`];
     }
@@ -2380,7 +2388,8 @@ E4`;
           const track = tracks[trackIdx];
           rows = midiTrackToRows(midi, track, {
             splitBars,
-            melodyOnly: midiMelodyOnlyEl.checked
+            melodyOnly: midiMelodyOnlyEl.checked,
+            title: fileTitleForComment(file.name)
           });
           // The beat grid relies on character-offset alignment with placeholder
           // columns, so disable settings that compact notes left-to-right.
