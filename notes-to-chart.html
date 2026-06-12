@@ -230,6 +230,10 @@
       border-radius: 4px;
       font: inherit;
     }
+    .lookup-row select[multiple] {
+      min-height: 5.5rem;
+      padding: 6px 8px;
+    }
     .lookup-row input[type="file"] {
       flex: 1 1 14rem;
       min-width: 0;
@@ -302,6 +306,29 @@
       line-height: 1.4;
     }
     .lookup-hint a { color: var(--ink); }
+    .midi-player {
+      align-items: stretch;
+      padding-top: 4px;
+    }
+    .midi-player label {
+      flex: 1 1 14rem;
+      margin-bottom: 0;
+    }
+    .midi-player .field-label {
+      margin-bottom: 4px;
+    }
+    .midi-player-actions {
+      display: flex;
+      flex: 0 0 auto;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: flex-end;
+    }
+    .midi-player-status {
+      flex: 1 1 100%;
+      margin: -2px 0 0;
+      min-height: 1.1em;
+    }
     .toolbar {
       display: flex;
       flex-wrap: wrap;
@@ -679,6 +706,17 @@
               <wa-switch id="midiSplitBars" checked title="One row per measure, with notes placed on a beat grid so bars and beats align vertically (rests show as gaps).">Split into bars (beat grid)</wa-switch>
             </label>
           </div>
+          <div class="lookup-row midi-player" id="midiPlayer" hidden>
+            <label for="midiChannelSelect">
+              <span class="field-label">Playback channels</span>
+              <select id="midiChannelSelect" multiple aria-label="MIDI playback channels"></select>
+            </label>
+            <div class="midi-player-actions">
+              <button type="button" id="midiPlayBtn" data-ui-icon="play">Play</button>
+              <button type="button" id="midiStopBtn" data-ui-icon="square" disabled>Stop</button>
+            </div>
+            <p class="lookup-feedback midi-player-status" id="midiPlayerState" role="status" aria-live="polite"></p>
+          </div>
           </div>
         </div>
       </details>
@@ -996,6 +1034,11 @@ E4`;
     const midiTrackSelectEl = document.getElementById("midiTrackSelect");
     const midiMelodyOnlyEl = document.getElementById("midiMelodyOnly");
     const midiSplitBarsEl = document.getElementById("midiSplitBars");
+    const midiPlayerEl = document.getElementById("midiPlayer");
+    const midiChannelSelectEl = document.getElementById("midiChannelSelect");
+    const midiPlayBtn = document.getElementById("midiPlayBtn");
+    const midiStopBtn = document.getElementById("midiStopBtn");
+    const midiPlayerStateEl = document.getElementById("midiPlayerState");
     const tuneSearchStateEl = document.getElementById("tuneSearchState");
 
     function showStatus(message, isError = false) {
@@ -2104,6 +2147,10 @@ E4`;
     // Parsed MIDI for the currently selected .mid file: { midi, tracks, fileName }.
     // Cached on file change so the track selector and import don't re-parse.
     let midiCache = null;
+    let midiAudioContext = null;
+    let midiMasterGain = null;
+    let midiActiveSources = [];
+    let midiPlaybackTimer = null;
     let lookupSearchResults = [];
     let tunepalSourceIds = null;
     let tuneSearchDebounceTimer = null;
@@ -2330,6 +2377,11 @@ E4`;
       return l.endsWith(".mid") || l.endsWith(".midi");
     }
 
+    function midiFileCacheKey(file) {
+      if (!file) return "";
+      return `${file.name}|${file.size}|${file.lastModified}`;
+    }
+
     // Pitched, non-percussion tracks, densest (most notes) first.
     function pitchedTracks(midi) {
       return midi.tracks
@@ -2337,12 +2389,149 @@ E4`;
         .sort((a, b) => b.notes.length - a.notes.length);
     }
 
+    function midiDisplayChannel(channel) {
+      if (!Number.isFinite(channel)) return "";
+      return channel >= 0 && channel <= 15 ? String(channel + 1) : String(channel);
+    }
+
     function midiTrackLabel(track, idx) {
       const name = (track.name && track.name.trim())
         || (track.instrument && track.instrument.name)
         || `Track ${idx + 1}`;
-      const ch = Number.isFinite(track.channel) ? ` · ch ${track.channel}` : "";
+      const ch = Number.isFinite(track.channel) ? ` · ch ${midiDisplayChannel(track.channel)}` : "";
       return `${name}${ch} · ${track.notes.length} notes`;
+    }
+
+    function setMidiPlayerState(message, opts = {}) {
+      if (!midiPlayerStateEl) return;
+      midiPlayerStateEl.textContent = message || "";
+      midiPlayerStateEl.classList.toggle("error", !!opts.error);
+      midiPlayerStateEl.classList.toggle("busy", !!opts.busy);
+    }
+
+    function populateMidiChannelOptions(tracks) {
+      midiChannelSelectEl.replaceChildren();
+      const byChannel = new Map();
+      for (const track of tracks) {
+        if (!Number.isFinite(track.channel)) continue;
+        const current = byChannel.get(track.channel) || { notes: 0, tracks: 0 };
+        current.notes += track.notes.length;
+        current.tracks += 1;
+        byChannel.set(track.channel, current);
+      }
+      for (const [channel, info] of [...byChannel.entries()].sort((a, b) => a[0] - b[0])) {
+        const opt = document.createElement("option");
+        opt.value = String(channel);
+        opt.selected = true;
+        opt.textContent = `Channel ${midiDisplayChannel(channel)} · ${info.notes} notes`;
+        midiChannelSelectEl.appendChild(opt);
+      }
+      if (byChannel.size) {
+        const plural = byChannel.size === 1 ? "" : "s";
+        setMidiPlayerState(`${byChannel.size} playback channel${plural} selected.`);
+      } else {
+        setMidiPlayerState("No channel metadata found; playback will use all pitched tracks.");
+      }
+    }
+
+    function selectedMidiPlaybackChannels() {
+      if (!midiChannelSelectEl.options.length) return null;
+      const selected = Array.from(midiChannelSelectEl.selectedOptions)
+        .map(opt => Number(opt.value))
+        .filter(Number.isFinite);
+      if (!selected.length) throw new Error("Select at least one playback channel.");
+      return new Set(selected);
+    }
+
+    function midiTracksForPlayback(tracks, selectedChannels) {
+      if (!selectedChannels) return tracks;
+      return tracks.filter(track => Number.isFinite(track.channel) && selectedChannels.has(track.channel));
+    }
+
+    function midiNoteFrequency(midiNote) {
+      return 440 * Math.pow(2, (midiNote - 69) / 12);
+    }
+
+    function stopMidiPlayback(opts = {}) {
+      clearTimeout(midiPlaybackTimer);
+      midiPlaybackTimer = null;
+      for (const source of midiActiveSources) {
+        try { source.stop(0); } catch (_) {}
+      }
+      midiActiveSources = [];
+      if (midiMasterGain) {
+        try { midiMasterGain.disconnect(); } catch (_) {}
+        midiMasterGain = null;
+      }
+      midiPlayBtn.disabled = false;
+      midiStopBtn.disabled = true;
+      if (!opts.silent) setMidiPlayerState("Playback stopped.");
+    }
+
+    async function playSelectedMidiChannels() {
+      try {
+        if (!midiCache || !midiCache.tracks || !midiCache.tracks.length) {
+          throw new Error("Pick a MIDI file first.");
+        }
+        const selectedChannels = selectedMidiPlaybackChannels();
+        const tracks = midiTracksForPlayback(midiCache.tracks, selectedChannels);
+        const notes = tracks.flatMap(track => track.notes || [])
+          .filter(note => Number.isFinite(note.midi) && Number.isFinite(note.time))
+          .sort((a, b) => a.time - b.time || a.midi - b.midi);
+        if (!notes.length) throw new Error("No notes found for the selected playback channels.");
+
+        stopMidiPlayback({ silent: true });
+        const AudioCtor = window.AudioContext || window.webkitAudioContext;
+        if (!AudioCtor) throw new Error("This browser does not support Web Audio playback.");
+        if (!midiAudioContext) midiAudioContext = new AudioCtor();
+        if (midiAudioContext.state === "suspended") await midiAudioContext.resume();
+
+        const firstTime = Math.min(...notes.map(n => n.time));
+        const lastEnd = Math.max(...notes.map(n => n.time + Math.max(n.duration || 0.12, 0.06)));
+        const baseTime = midiAudioContext.currentTime + 0.06;
+        midiMasterGain = midiAudioContext.createGain();
+        midiMasterGain.gain.value = 0.18;
+        midiMasterGain.connect(midiAudioContext.destination);
+
+        for (const note of notes) {
+          const start = baseTime + Math.max(0, note.time - firstTime);
+          const duration = Math.max(note.duration || 0.12, 0.06);
+          const end = start + duration;
+          const osc = midiAudioContext.createOscillator();
+          const noteGain = midiAudioContext.createGain();
+          osc.type = "triangle";
+          osc.frequency.setValueAtTime(midiNoteFrequency(note.midi), start);
+          noteGain.gain.setValueAtTime(0.0001, start);
+          noteGain.gain.exponentialRampToValueAtTime(0.7, start + Math.min(0.025, duration / 4));
+          noteGain.gain.setValueAtTime(0.7, Math.max(start + 0.03, end - 0.04));
+          noteGain.gain.exponentialRampToValueAtTime(0.0001, end);
+          osc.connect(noteGain);
+          noteGain.connect(midiMasterGain);
+          osc.onended = () => {
+            midiActiveSources = midiActiveSources.filter(source => source !== osc);
+            try { osc.disconnect(); } catch (_) {}
+            try { noteGain.disconnect(); } catch (_) {}
+          };
+          osc.start(start);
+          osc.stop(end + 0.02);
+          midiActiveSources.push(osc);
+        }
+
+        midiPlayBtn.disabled = true;
+        midiStopBtn.disabled = false;
+        const channelLabel = selectedChannels
+          ? [...selectedChannels].sort((a, b) => a - b).map(midiDisplayChannel).join(", ")
+          : "all pitched tracks";
+        setMidiPlayerState(`Playing ${notes.length} notes from ${channelLabel}.`);
+        const ms = Math.max(0, (lastEnd - firstTime) * 1000 + 180);
+        midiPlaybackTimer = setTimeout(() => {
+          stopMidiPlayback({ silent: true });
+          setMidiPlayerState("Playback finished.");
+        }, ms);
+      } catch (err) {
+        stopMidiPlayback({ silent: true });
+        setMidiPlayerState(err.message || "Couldn't play this MIDI file.", { error: true });
+      }
     }
 
     // Collapse simultaneous notes (same onset tick) to the highest pitch (melody).
@@ -2458,7 +2647,8 @@ E4`;
           label = `${rows.length} row(s) from ${file.name}`;
         } else if (isMidiFileName(lower)) {
           let midi, tracks;
-          if (midiCache && midiCache.fileName === file.name) {
+          const fileKey = midiFileCacheKey(file);
+          if (midiCache && midiCache.fileKey === fileKey) {
             ({ midi, tracks } = midiCache);
           } else {
             if (typeof window.Midi !== "function") {
@@ -2466,6 +2656,19 @@ E4`;
             }
             midi = new window.Midi(await file.arrayBuffer());
             tracks = pitchedTracks(midi);
+            if (!tracks.length) throw new Error("No pitched notes found in MIDI file.");
+            midiCache = { midi, tracks, fileName: file.name, fileKey };
+            midiTrackSelectEl.replaceChildren();
+            tracks.forEach((t, idx) => {
+              const opt = document.createElement("option");
+              opt.value = String(idx);
+              opt.textContent = midiTrackLabel(t, idx);
+              midiTrackSelectEl.appendChild(opt);
+            });
+            midiTrackSelectEl.value = "0";
+            populateMidiChannelOptions(tracks);
+            midiOptionsEl.hidden = false;
+            midiPlayerEl.hidden = false;
           }
           if (!tracks.length) throw new Error("No pitched notes found in MIDI file.");
           const trackIdx = Math.min(
@@ -2798,20 +3001,40 @@ E4`;
     tuneAppendBtn.addEventListener("click", () => applyTuneImport("append"));
     tuneFileReplaceBtn.addEventListener("click", () => runFileImport("replace"));
     tuneFileAppendBtn.addEventListener("click", () => runFileImport("append"));
+    midiPlayBtn.addEventListener("click", playSelectedMidiChannels);
+    midiStopBtn.addEventListener("click", () => stopMidiPlayback());
+    midiChannelSelectEl.addEventListener("change", () => {
+      try {
+        const selectedChannels = selectedMidiPlaybackChannels();
+        if (!selectedChannels) {
+          setMidiPlayerState("Playback will use all pitched tracks.");
+          return;
+        }
+        const channelLabel = [...selectedChannels].sort((a, b) => a - b).map(midiDisplayChannel).join(", ");
+        setMidiPlayerState(`Selected playback channel${selectedChannels.size === 1 ? "" : "s"}: ${channelLabel}.`);
+      } catch (err) {
+        setMidiPlayerState(err.message, { error: true });
+      }
+    });
+    window.addEventListener("beforeunload", () => stopMidiPlayback({ silent: true }));
 
     // When a .mid/.midi file is chosen, parse it up front and offer a per-track
     // selector (defaulting to the densest track). Other file types hide the options.
     async function onMidiFileSelected() {
       const file = tuneFileInputEl.files && tuneFileInputEl.files[0];
+      stopMidiPlayback({ silent: true });
       midiCache = null;
       midiTrackSelectEl.replaceChildren();
+      midiChannelSelectEl.replaceChildren();
       midiOptionsEl.hidden = true;
+      midiPlayerEl.hidden = true;
+      setMidiPlayerState("");
       if (!file || !isMidiFileName(file.name) || typeof window.Midi !== "function") return;
       try {
         const midi = new window.Midi(await file.arrayBuffer());
         const tracks = pitchedTracks(midi);
         if (!tracks.length) return;
-        midiCache = { midi, tracks, fileName: file.name };
+        midiCache = { midi, tracks, fileName: file.name, fileKey: midiFileCacheKey(file) };
         tracks.forEach((t, idx) => {
           const opt = document.createElement("option");
           opt.value = String(idx);
@@ -2819,10 +3042,13 @@ E4`;
           midiTrackSelectEl.appendChild(opt);
         });
         midiTrackSelectEl.value = "0";
+        populateMidiChannelOptions(tracks);
         midiOptionsEl.hidden = false;
+        midiPlayerEl.hidden = false;
       } catch (_) {
         midiCache = null;
         midiOptionsEl.hidden = true;
+        midiPlayerEl.hidden = true;
       }
     }
     tuneFileInputEl.addEventListener("change", onMidiFileSelected);
