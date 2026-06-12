@@ -10,6 +10,27 @@
     { href: "notes-to-chart.html", label: "Notes → charts" }
   ];
 
+  function readThemePickerFlag() {
+    const currentParams = new URLSearchParams(location.search);
+    for (const key of ["themePicker", "themeSelector", "themes"]) {
+      if (!currentParams.has(key)) continue;
+      const raw = currentParams.get(key);
+      if (raw === "" || /^(1|true|yes|on)$/i.test(raw)) return { key, value: raw };
+    }
+    return null;
+  }
+
+  function appendThemePickerFlag(href) {
+    const flag = readThemePickerFlag();
+    if (!flag) return href;
+    const [path, hash = ""] = href.split("#");
+    const [base, query = ""] = path.split("?");
+    const params = new URLSearchParams(query);
+    params.set(flag.key, flag.value);
+    const next = `${base}?${params.toString()}`;
+    return hash ? `${next}#${hash}` : next;
+  }
+
   function normalizePage(pathname) {
     const raw = (String(pathname || "").split("/").pop() || "").toLowerCase();
     if (!raw || raw === "index" || raw === "index.html") return "index.html";
@@ -92,7 +113,7 @@
       }
     }
     const query = params.toString();
-    return query ? `index.html?${query}` : "index.html";
+    return appendThemePickerFlag(query ? `index.html?${query}` : "index.html");
   }
 
   function build() {
@@ -102,7 +123,7 @@
     nav.setAttribute("aria-label", "Pages");
     for (const page of PAGES) {
       const a = document.createElement("a");
-      a.href = page.href === "index.html" ? getStoredIndexHref() : page.href;
+      a.href = page.href === "index.html" ? getStoredIndexHref() : appendThemePickerFlag(page.href);
       a.textContent = page.label;
       if (normalizePage(page.href) === current) a.setAttribute("aria-current", "page");
       nav.appendChild(a);

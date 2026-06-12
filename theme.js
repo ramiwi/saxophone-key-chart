@@ -1,7 +1,7 @@
 /* Shared UI themes for the sax chart pages.
    Single source of truth — include with <script src="theme.js" defer></script>
-   after nav.js. Adds a swatch-chip theme picker under the site nav and
-   persists the choice.
+   after nav.js. Applies the persisted theme. A swatch-chip theme picker is
+   added under the site nav only when enabled with a URL flag.
 
    The palettes are lifted verbatim from
    docs/reference/sax-fingering-chart-colors.html (Color Hunt inspired):
@@ -109,6 +109,16 @@
 
   function saveTheme(id) {
     try { localStorage.setItem(STORAGE_KEY, id); } catch { /* unavailable */ }
+  }
+
+  function shouldShowPicker() {
+    const params = new URLSearchParams(location.search);
+    for (const key of ["themePicker", "themeSelector", "themes"]) {
+      if (!params.has(key)) continue;
+      const raw = params.get(key);
+      return raw === "" || /^(1|true|yes|on)$/i.test(raw);
+    }
+    return false;
   }
 
   const darkStaffSelectors = THEMES
@@ -327,9 +337,11 @@
     }
   }
 
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", build);
-  } else {
-    build();
+  if (shouldShowPicker()) {
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", build);
+    } else {
+      build();
+    }
   }
 })();

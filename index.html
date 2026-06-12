@@ -645,7 +645,10 @@
         flats: preferFlatsEl.checked ? "1" : "0",
         dark: darkPressedEl.checked ? "1" : "0"
       };
-      const params = new URLSearchParams(state);
+      const params = new URLSearchParams(location.search);
+      for (const [key, value] of Object.entries(state)) {
+        params.set(key, value);
+      }
       writeStoredState(state);
       history.replaceState(null, "", `${location.pathname}?${params.toString()}`);
     }
