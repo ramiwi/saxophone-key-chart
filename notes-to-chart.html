@@ -46,6 +46,41 @@
     .disclosure > summary:hover { color: var(--accent); }
     .disclosure .disclosure-body { padding: 0 12px 12px; }
     .disclosure .settings { margin-bottom: 0; }
+    /* Make active transposition impossible to miss — it changes every rendered diagram. */
+    .transpose-badge {
+      display: none;
+      margin-left: auto;
+      padding: 2px 9px;
+      border-radius: 999px;
+      font-size: .72rem;
+      font-weight: 700;
+      letter-spacing: .02em;
+      color: #fff;
+      background: #c2410c;
+      box-shadow: 0 0 0 2px rgba(194, 65, 12, .18);
+    }
+    .disclosure.transpose-active { border-color: #c2410c; }
+    .disclosure.transpose-active > summary { color: #c2410c; }
+    .disclosure.transpose-active > summary::before { color: #c2410c; }
+    .disclosure.transpose-active .transpose-badge { display: inline-block; }
+    .transpose-status {
+      display: inline-block;
+      padding: 4px 12px;
+      border-radius: 6px;
+      font-weight: 700;
+      color: #9a3412;
+      background: #ffedd5;
+      border: 1px solid #fdba74;
+    }
+    .transpose-status::before { content: "↕ "; }
+    .transpose-status.is-none {
+      color: var(--muted);
+      background: transparent;
+      border-color: transparent;
+      font-weight: 400;
+      padding-left: 0;
+    }
+    .transpose-status.is-none::before { content: ""; }
     /* Emphasize the primary actions. */
     .toolbar button#savePresetBtn {
       background: var(--accent);
@@ -621,8 +656,8 @@
         </div>
       </details>
 
-      <details class="disclosure" data-remember="n2c.transpose.open">
-        <summary>Transpose by key</summary>
+      <details class="disclosure" id="transposeDisclosure" data-remember="n2c.transpose.open">
+        <summary>Transpose by key<span id="transposeBadge" class="transpose-badge"></span></summary>
         <div class="disclosure-body">
           <div class="lookup-row">
             <label class="field" style="flex:0 0 auto">
@@ -636,7 +671,7 @@
             <button type="button" id="transposeResetBtn">Reset</button>
             <button type="button" id="transposeBakeBtn" title="Rewrite the note text above with the transposed pitches.">Bake into text</button>
           </div>
-          <p id="transposeInfo" class="lookup-hint" role="status" aria-live="polite">No transposition.</p>
+          <p class="lookup-hint" style="margin-bottom:6px"><span id="transposeInfo" class="transpose-status is-none" role="status" aria-live="polite">No transposition</span></p>
           <p class="lookup-hint">
             Shifts every rendered diagram and staff by the interval between the two keys, without
             changing the text above. <strong>Bake into text</strong> writes the transposed notes
@@ -877,6 +912,8 @@ E4`;
     const transposeFromEl = document.getElementById("transposeFrom");
     const transposeToEl = document.getElementById("transposeTo");
     const transposeInfoEl = document.getElementById("transposeInfo");
+    const transposeDisclosureEl = document.getElementById("transposeDisclosure");
+    const transposeBadgeEl = document.getElementById("transposeBadge");
     const transposeResetBtn = document.getElementById("transposeResetBtn");
     const transposeBakeBtn = document.getElementById("transposeBakeBtn");
     const undoBtn = document.getElementById("undoBtn");
@@ -1019,9 +1056,13 @@ E4`;
 
     function updateTransposeInfo() {
       const semis = keyTransposeSemitones();
-      transposeInfoEl.textContent = semis
-        ? `Up ${semis} semitone${semis === 1 ? "" : "s"}.`
-        : "No transposition.";
+      const active = !!semis;
+      transposeInfoEl.textContent = active
+        ? `Transposing up ${semis} semitone${semis === 1 ? "" : "s"} — affects every rendered diagram`
+        : "No transposition";
+      transposeInfoEl.classList.toggle("is-none", !active);
+      transposeDisclosureEl.classList.toggle("transpose-active", active);
+      transposeBadgeEl.textContent = active ? `+${semis}` : "";
     }
 
     function transposeScientific(note, semitones, preferFlats) {
