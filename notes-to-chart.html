@@ -192,6 +192,27 @@
       color: var(--ink);
       margin-bottom: 8px;
     }
+    /* Split the lookup panel into clearly separated sub-tasks. */
+    .lookup-section {
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: var(--card);
+      padding: 12px;
+      margin-bottom: 12px;
+    }
+    .lookup-section:last-child { margin-bottom: 0; }
+    .lookup-section-title {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      margin: 0 0 10px;
+      font-size: .72rem;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      font-weight: 700;
+      color: var(--accent);
+    }
+    .lookup-section-title .icon { font-size: 1rem; letter-spacing: 0; }
     .lookup-row {
       display: flex;
       flex-wrap: wrap;
@@ -224,6 +245,14 @@
       cursor: pointer;
     }
     .lookup-row button:disabled { opacity: 0.55; cursor: wait; }
+    /* Make the main action of each sub-task stand out from secondary buttons. */
+    .lookup-row button.btn-primary {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: var(--on-accent, #fff);
+      font-weight: 600;
+    }
+    .lookup-row button.btn-primary:hover { filter: brightness(.94); }
     .lookup-feedback {
       margin: 0;
       font-size: .75rem;
@@ -587,6 +616,8 @@
       <details class="disclosure" data-remember="n2c.lookup.open">
         <summary>Look up a tune online or import a file</summary>
         <div class="disclosure-body">
+          <div class="lookup-section">
+          <p class="lookup-section-title"><span class="icon">🔎</span> Search online</p>
           <div class="lookup-row">
             <select id="tuneSource" aria-label="Tune source">
               <option value="session" selected>The Session API</option>
@@ -599,7 +630,7 @@
           </div>
           <div class="lookup-row">
             <input type="search" id="tuneSearch" placeholder="Search The Session (e.g. Morning Dew)" autocomplete="off" />
-            <button type="button" id="tuneSearchBtn">Search</button>
+            <button type="button" id="tuneSearchBtn" class="btn-primary">Search</button>
           </div>
           <p id="tuneSearchState" class="lookup-feedback" role="status" aria-live="polite">
             Type to search (or press Enter).
@@ -618,7 +649,7 @@
             <select id="tuneSettingSelect" aria-label="Transcription setting" hidden>
               <option value="">Setting…</option>
             </select>
-            <button type="button" id="tuneReplaceBtn">Replace input</button>
+            <button type="button" id="tuneReplaceBtn" class="btn-primary">Replace input</button>
             <button type="button" id="tuneAppendBtn">Append</button>
           </div>
           <p class="lookup-hint">
@@ -629,11 +660,16 @@
             <code>/search</code> and <code>/tunes/:id</code>.
             Imported notes are transposed to your selected instrument (C/Bb/Eb) before rendering sax fingerings.
           </p>
+          </div>
+
+          <div class="lookup-section">
+          <p class="lookup-section-title"><span class="icon">📁</span> Import a file</p>
           <div class="lookup-row">
             <input type="file" id="tuneFileInput" accept=".abc,.mid,.midi,.musicxml,.xml" />
-            <button type="button" id="tuneFileReplaceBtn">Import file (replace)</button>
+            <button type="button" id="tuneFileReplaceBtn" class="btn-primary">Import file (replace)</button>
             <button type="button" id="tuneFileAppendBtn">Import file (append)</button>
           </div>
+          <p class="lookup-hint" style="margin-top:2px">Accepts ABC, MIDI (.mid/.midi) and MusicXML (.xml/.musicxml) files.</p>
           <div class="lookup-row" id="midiOptions" hidden>
             <select id="midiTrackSelect" aria-label="MIDI track"></select>
             <label class="switch-field" style="flex:0 0 auto">
@@ -642,6 +678,7 @@
             <label class="switch-field" style="flex:0 0 auto">
               <wa-switch id="midiSplitBars" checked title="One row per measure, with notes placed on a beat grid so bars and beats align vertically (rests show as gaps).">Split into bars (beat grid)</wa-switch>
             </label>
+          </div>
           </div>
         </div>
       </details>
