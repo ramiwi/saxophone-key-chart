@@ -131,6 +131,17 @@
       --key-pressed-stroke: var(--accent-hi);
       --key-pressed-label: var(--on-accent);
     }
+    /* Native form controls: WebAwesome's reset paints them white and ignores
+       color-scheme, so theme them explicitly (lookup selects, file input,
+       per-card variant selects, the note textarea, etc.). */
+    :root[data-theme] textarea,
+    :root[data-theme] select,
+    :root[data-theme] input {
+      background: var(--card);
+      color: var(--ink);
+      border-color: var(--line);
+    }
+    :root[data-theme] select option { background: var(--card); color: var(--ink); }
     /* The "Dark pressed fill" toggle is redundant under a theme; keep the
        themed pressed colors either way. */
     :root[data-theme] body.dark-pressed {
