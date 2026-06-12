@@ -47,7 +47,19 @@
     .site-nav a[aria-current="page"]:hover { color: #fff; }
     .site-nav a[aria-current="page"] + a,
     .site-nav a:has(+ a[aria-current="page"]) { border-left-color: transparent; }
-    @media print { .site-nav { display: none !important; } }
+    .site-version {
+      display: block;
+      margin: -8px auto 12px;
+      width: fit-content;
+      font-size: .68rem;
+      font-style: italic;
+      letter-spacing: .12em;
+      color: var(--muted, #888);
+      opacity: .45;
+      user-select: none;
+      pointer-events: none;
+    }
+    @media print { .site-nav, .site-version { display: none !important; } }
   `;
   document.head.appendChild(style);
 
@@ -96,6 +108,13 @@
       nav.appendChild(a);
     }
     wrap.insertBefore(nav, wrap.firstChild);
+
+    if (window.APP_VERSION) {
+      const version = document.createElement("div");
+      version.className = "site-version no-print";
+      version.textContent = `v${window.APP_VERSION}`;
+      nav.after(version);
+    }
   }
 
   if (document.readyState === "loading") {
