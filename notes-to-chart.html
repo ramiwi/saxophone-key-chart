@@ -10,6 +10,7 @@
   <script type="module" src="https://ka-f.webawesome.com/webawesome@3.7.0/webawesome.loader.js"></script>
   <script src="version.js"></script>
   <script src="nav.js" defer></script>
+  <script src="theme.js" defer></script>
   <script src="ui-icons.js" defer></script>
   <script src="app-footer.js" defer></script>
   <!-- Music-notation rendering for the optional per-row staff. UMD build
@@ -26,7 +27,7 @@
     .disclosure {
       border: 1px solid var(--line);
       border-radius: 6px;
-      background: #fafafa;
+      background: var(--bg2);
       margin-bottom: 12px;
     }
     .disclosure > summary {
@@ -85,18 +86,25 @@
     .toolbar button#savePresetBtn {
       background: var(--accent);
       border-color: var(--accent);
-      color: #fff;
+      color: var(--on-accent);
     }
     .toolbar button#savePresetBtn:hover { filter: brightness(.94); border-color: var(--accent); }
     .toolbar button#renderBtn { border-color: var(--accent); color: var(--accent); font-weight: 600; }
 
     :root {
       --bg: #ffffff;
+      --bg2: #fafafa;
+      --card: #ffffff;
       --ink: #000000;
       --muted: #444444;
       --line: #bbbbbb;
       --accent: #a87a16;
       --accent-fill: #f3e7c8;
+      --on-accent: #ffffff;
+      --key-fill: #ffffff;
+      --key-stroke: #000000;
+      --key-label: #000000;
+      --key-hover: #eeeeee;
       --key-pressed: #cccccc;
       --key-pressed-stroke: #000000;
       --key-pressed-label: #000000;
@@ -176,7 +184,7 @@
       padding: 10px 12px;
       border: 1px solid var(--line);
       border-radius: 6px;
-      background: #fafafa;
+      background: var(--bg2);
     }
     .tune-lookup > label {
       font-size: .82rem;
@@ -212,7 +220,7 @@
       border-radius: 4px;
       font: inherit;
       color: var(--ink);
-      background: #fff;
+      background: var(--card);
       cursor: pointer;
     }
     .lookup-row button:disabled { opacity: 0.55; cursor: wait; }
@@ -281,7 +289,7 @@
       border-radius: 4px;
       font: inherit;
       color: var(--ink);
-      background: #fff;
+      background: var(--card);
       cursor: pointer;
     }
     .switch-field {
@@ -340,7 +348,7 @@
       border-radius: 4px;
       font: inherit;
       color: var(--ink);
-      background: #fff;
+      background: var(--card);
     }
     .field input[type="number"] { width: 4.5rem; }
     .field input[type="text"] { width: 8rem; }
@@ -381,7 +389,7 @@
     .status {
       padding: 12px;
       border-radius: 4px;
-      background: #fff;
+      background: var(--card);
       border: 1px solid var(--line);
       margin-bottom: 12px;
     }
@@ -403,7 +411,7 @@
       border: 1.5px solid var(--ink);
       vertical-align: middle;
       margin-right: 6px;
-      background: #fff;
+      background: var(--key-fill);
     }
     .dot.p { background: var(--key-pressed); }
     .rows {
@@ -416,7 +424,7 @@
       border: 1px solid var(--line);
       border-radius: 4px;
       padding: 10px;
-      background: #fff;
+      background: var(--card);
       width: max-content;
       min-width: 100%;
       break-inside: avoid;
@@ -443,7 +451,7 @@
       border: 1px solid var(--line);
       border-radius: 4px;
       padding: 8px;
-      background: #fff;
+      background: var(--card);
     }
     .card { transition: border-color .16s ease, box-shadow .16s ease; }
     .card:hover { border-color: var(--accent); box-shadow: 0 6px 16px -12px rgba(0, 0, 0, .4); }
@@ -481,12 +489,12 @@
       display: block;
     }
     .diagram-wrap svg .key .key-fill {
-      fill: #ffffff;
-      stroke: #000000;
+      fill: var(--key-fill);
+      stroke: var(--key-stroke);
       stroke-width: 1.5;
     }
     .diagram-wrap svg .key .key-label,
-    .diagram-wrap svg .key .key-label-sm { fill: #000000; }
+    .diagram-wrap svg .key .key-label-sm { fill: var(--key-label); }
     .diagram-wrap svg .key.pressed .key-fill {
       fill: var(--key-pressed);
       stroke: var(--key-pressed-stroke);

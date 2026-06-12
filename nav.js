@@ -27,7 +27,7 @@
       margin: 0 auto 12px;
       border: 1px solid var(--line, #bbb);
       border-radius: 999px;
-      background: #fff;
+      background: var(--card, #fff);
       overflow: hidden;
     }
     .site-nav a {
@@ -40,11 +40,11 @@
     .site-nav a + a { border-left: 1px solid var(--line, #bbb); }
     .site-nav a:hover { color: var(--accent, #a87a16); }
     .site-nav a[aria-current="page"] {
-      color: #fff;
+      color: var(--on-accent, #fff);
       background: var(--accent, #a87a16);
       font-weight: 600;
     }
-    .site-nav a[aria-current="page"]:hover { color: #fff; }
+    .site-nav a[aria-current="page"]:hover { color: var(--on-accent, #fff); }
     .site-nav a[aria-current="page"] + a,
     .site-nav a:has(+ a[aria-current="page"]) { border-left-color: transparent; }
     .site-version {

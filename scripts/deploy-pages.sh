@@ -14,6 +14,7 @@ FILES=(
   "chart-transfer.js"
   "diagram.js"
   "nav.js"
+  "theme.js"
   "schema.js"
   "ui-icons.css"
   "ui-icons.js"
